@@ -507,8 +507,15 @@ const DashboardView = ({ totalIncome, totalExpenses, categoryStats, expenses, me
   );
 };
 
-const IncomeView = ({ members, updateMembers, currency, isAdding, onClose }) => {
+const IncomeView = ({ members, currency, isAdding, onClose }) => {
   const [newSource, setNewSource] = useState({ memberId: '', source: '', amount: '', isVariable: false });
+
+  // RF-07: Auto-detect variable income based on source
+  const handleSourceChange = (val) => {
+    const isVar = ["Trabajo Independiente", "Comisiones", "Ventas", "Otro"].some(k => val.includes(k));
+    setNewSource(prev => ({ ...prev, source: val, isVariable: isVar }));
+  };
+
   const handleAdd = async () => {
     if (!newSource.memberId || !newSource.amount) return;
     const { error } = await supabase.from('incomes').insert({
@@ -520,7 +527,72 @@ const IncomeView = ({ members, updateMembers, currency, isAdding, onClose }) => 
     if (error) alert("Error guardando ingreso");
     else onClose();
   };
-  return (<div className="space-y-6 animate-fade-in pb-20"><h2 className="text-2xl font-bold">Ingresos</h2><div className="grid gap-4">{members.map(m => (<div key={m.id} className="bg-white p-4 rounded-xl shadow-sm"><div className="font-bold mb-2 flex items-center gap-2">{m.avatar} {m.name}</div><div className="space-y-2">{m.incomes?.map(i => (<div key={i.id} className="flex justify-between text-sm"><span>{i.source}</span><span className="font-bold">{currency} {formatCurrencyInput(i.amount)}</span></div>))}</div></div>))}</div>{isAdding && <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4"><div className="bg-white w-full max-w-md rounded-2xl p-6"><h3 className="font-bold mb-4">Nuevo Ingreso</h3><select className="w-full border p-2 mb-2 rounded" onChange={e => setNewSource({ ...newSource, memberId: e.target.value })}><option value="">Miembro</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select><input type="text" className="w-full border p-2 mb-2 rounded" placeholder="Fuente" onChange={e => setNewSource({ ...newSource, source: e.target.value })} /><input type="text" className="w-full border p-2 mb-4 rounded" placeholder="Monto" onChange={e => setNewSource({ ...newSource, amount: e.target.value })} /><button onClick={handleAdd} className="w-full bg-emerald-900 text-white py-2 rounded">Guardar</button><button onClick={onClose} className="w-full mt-2 text-gray-500">Cancelar</button></div></div>}</div>);
+
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Ingresos</h2><button onClick={onClose} className="text-emerald-600 font-bold text-sm hidden">Cerrar</button></div>
+      <div className="grid gap-4">
+        {members.map(m => (
+          <div key={m.id} className="bg-white p-4 rounded-xl shadow-sm">
+            <div className="font-bold mb-2 flex items-center gap-2">{m.avatar} {m.name}</div>
+            <div className="space-y-2">
+              {m.incomes?.map(i => (
+                <div key={i.id} className="flex justify-between items-center text-sm p-2 hover:bg-gray-50 rounded">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${i.isVariable ? 'bg-yellow-400' : 'bg-emerald-400'}`}></span>
+                    <span>{i.source}</span>
+                  </div>
+                  <span className="font-bold">{currency} {formatCurrencyInput(i.amount)}</span>
+                </div>
+              ))}
+              {(!m.incomes || m.incomes.length === 0) && <p className="text-gray-400 text-xs italic opacity-70">Sin ingresos registrados</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* RF-07: Formulario de Ingreso Mejorado */}
+      {isAdding && (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up">
+            <h3 className="font-bold text-lg mb-4">Nuevo Ingreso</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Miembro</label>
+                <select className="w-full border p-3 rounded-xl bg-gray-50" onChange={e => setNewSource({ ...newSource, memberId: e.target.value })}>
+                  <option value="">Seleccionar...</option>
+                  {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">Fuente</label>
+                <input type="text" list="income-sources" className="w-full border p-3 rounded-xl" placeholder="Ej. Salario, Freelance..." value={newSource.source} onChange={e => handleSourceChange(e.target.value)} />
+                <datalist id="income-sources">
+                  <option value="Salario / Nómina" />
+                  <option value="Trabajo Independiente" />
+                  <option value="Arriendo" />
+                  <option value="Pensión" />
+                </datalist>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Monto Mensual</label>
+                  <input type="number" className="w-full border p-3 rounded-xl" placeholder="0.00" value={newSource.amount} onChange={e => setNewSource({ ...newSource, amount: e.target.value })} />
+                </div>
+                <div className="flex items-center pt-5">
+                  <button type="button" onClick={() => setNewSource(p => ({ ...p, isVariable: !p.isVariable }))} className={`px-4 py-3 rounded-xl text-sm font-bold border transition ${newSource.isVariable ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                    {newSource.isVariable ? 'Variable' : 'Fijo'}
+                  </button>
+                </div>
+              </div>
+              <button onClick={handleAdd} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold shadow-lg">Guardar Ingreso</button>
+              <button onClick={onClose} className="w-full py-3 text-gray-500 font-medium">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const DebtsView = ({ members, currency }) => {
@@ -680,7 +752,9 @@ export default function FamilyFinanceApp() {
         ...e,
         dueDate: e.due_date,
         responsibleId: e.responsible_id,
+        isRecurring: e.is_recurring,
         recurrenceType: e.recurrence_type,
+        billArrivalDay: e.bill_arrival_day,
         isRecurring: e.is_recur_ring,
         isAutoDebit: e.is_auto_debit,
         billArrivalDay: e.bill_arrival_day,
@@ -699,20 +773,29 @@ export default function FamilyFinanceApp() {
 
   const handleAddExpense = async (e) => {
     e.preventDefault();
+    // RF-09: Logic for Variable expenses
+    const finalAmount = newExpense.recurrenceType === 'variable' ? (parseFloat(newExpense.amount) || 0) : parseFloat(newExpense.amount);
+
     const { error } = await supabase.from('expenses').insert({
       title: newExpense.title,
-      amount: parseFloat(newExpense.amount),
+      amount: finalAmount,
       category: newExpense.category,
       due_date: newExpense.dueDate,
       responsible_id: newExpense.responsibleId,
-      is_recur_ring: newExpense.isRecurring || false,
-      recurrence_type: newExpense.recurrenceType || 'fixed',
-      status: 'pending',
-      payment_url: newExpense.paymentUrl
+      is_recurring: newExpense.isRecurring, // RF-08: Fixed mapping typo
+      recurrence_type: newExpense.recurrenceType,
+      bill_arrival_day: newExpense.isRecurring && newExpense.recurrenceType === 'variable' ? parseInt(newExpense.billArrivalDay) : null,
+      payment_url: newExpense.paymentUrl,
+      status: 'pending'
     });
-    if (error) alert("Error al crear gasto");
-    else {
+
+    if (error) {
+      console.error(error);
+      alert("Error al crear gasto: " + error.message);
+    } else {
       setIsAddModalOpen(false);
+      // Reset form properly
+      setNewExpense({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', billArrivalDay: '' });
       fetchData();
     }
   };
@@ -765,17 +848,78 @@ export default function FamilyFinanceApp() {
 
           {isAddModalOpen && (
             <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-              <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up">
-                <h3 className="font-bold text-lg mb-4">Nuevo Gasto</h3>
+              <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-lg">Nuevo Gasto</h3>
+                  <button onClick={() => setIsAddModalOpen(false)}><X className="w-6 h-6 text-gray-400" /></button>
+                </div>
                 <form onSubmit={handleAddExpense} className="space-y-4">
-                  <input className="w-full border p-2 rounded" placeholder="Concepto" value={newExpense.title} onChange={e => setNewExpense({ ...newExpense, title: e.target.value })} required />
-                  <input className="w-full border p-2 rounded" placeholder="Monto" value={newExpense.amount} onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} required />
-                  <input type="date" className="w-full border p-2 rounded" value={newExpense.dueDate} onChange={e => setNewExpense({ ...newExpense, dueDate: e.target.value })} required />
-                  <select className="w-full border p-2 rounded bg-white" value={newExpense.responsibleId} onChange={e => setNewExpense({ ...newExpense, responsibleId: e.target.value })}>
-                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                  <button type="submit" className="w-full bg-emerald-900 text-white py-3 rounded-xl font-bold">Guardar</button>
-                  <button type="button" onClick={() => setIsAddModalOpen(false)} className="w-full py-2 text-gray-500">Cancelar</button>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase">Concepto</label>
+                    <input className="w-full border p-3 rounded-xl" placeholder="Ej. Arriendo, Netflix..." value={newExpense.title} onChange={e => setNewExpense({ ...newExpense, title: e.target.value })} required />
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-gray-500 uppercase">Monto</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-3 text-gray-500">$</span>
+                        <input type="number" className="w-full border p-3 pl-7 rounded-xl" placeholder="0.00" value={newExpense.amount} onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} />
+                      </div>
+                    </div>
+                    <div className="w-1/3">
+                      <label className="text-xs font-bold text-gray-500 uppercase">Fecha Límite</label>
+                      <input type="date" className="w-full border p-3 rounded-xl text-sm" value={newExpense.dueDate} onChange={e => setNewExpense({ ...newExpense, dueDate: e.target.value })} required />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Opciones de Recurrencia (RF-08)</label>
+                    <div className="border rounded-xl p-3 space-y-3 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">¿Es un gasto mensual?</span>
+                        <button type="button" onClick={() => setNewExpense(p => ({ ...p, isRecurring: !p.isRecurring }))} className={`w-12 h-6 rounded-full transition-colors relative ${newExpense.isRecurring ? 'bg-emerald-500' : 'bg-gray-300'}`}>
+                          <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${newExpense.isRecurring ? 'left-7' : 'left-1'}`}></div>
+                        </button>
+                      </div>
+
+                      {newExpense.isRecurring && (
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-200">
+                          <button type="button" onClick={() => setNewExpense(p => ({ ...p, recurrenceType: 'fixed' }))} className={`p-2 text-xs font-bold rounded-lg border text-center ${newExpense.recurrenceType === 'fixed' ? 'bg-white border-emerald-500 text-emerald-700 shadow-sm' : 'border-transparent text-gray-400'}`}>
+                            Fijo (Mismo Valor)
+                          </button>
+                          <button type="button" onClick={() => setNewExpense(p => ({ ...p, recurrenceType: 'variable' }))} className={`p-2 text-xs font-bold rounded-lg border text-center ${newExpense.recurrenceType === 'variable' ? 'bg-white border-yellow-500 text-yellow-700 shadow-sm' : 'border-transparent text-gray-400'}`}>
+                            Variable (Servicios)
+                          </button>
+                        </div>
+                      )}
+
+                      {newExpense.isRecurring && newExpense.recurrenceType === 'variable' && (
+                        <div className="pt-2 animate-fade-in">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase">Día LLegada Factura</label>
+                          <input type="number" min="1" max="31" className="w-full border p-2 rounded-lg text-sm" placeholder="Ej. Día 15" value={newExpense.billArrivalDay || ''} onChange={e => setNewExpense({ ...newExpense, billArrivalDay: e.target.value })} />
+                          <p className="text-[10px] text-gray-400 mt-1">Te avisaremos este día para que ingreses el valor real.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-gray-500 uppercase">Responsable</label>
+                      <select className="w-full border p-3 rounded-xl bg-white" value={newExpense.responsibleId} onChange={e => setNewExpense({ ...newExpense, responsibleId: e.target.value })}>
+                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-gray-500 uppercase">Categoría</label>
+                      <select className="w-full border p-3 rounded-xl bg-white" value={newExpense.category} onChange={e => setNewExpense({ ...newExpense, category: e.target.value })}>
+                        {Object.entries(CATEGORIES).map(([key, val]) => <option key={key} value={key}>{val.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold shadow-lg text-lg hover:bg-black transition">Crear Gasto</button>
                 </form>
               </div>
             </div>
