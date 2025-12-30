@@ -106,7 +106,7 @@ const callGeminiAPI = async (prompt) => {
 // --- CONSTANTES ---
 const BANKS_BY_COUNTRY = {
   CO: ['Bancolombia', 'Davivienda', 'Banco de Bogotá', 'BBVA', 'Banco de Occidente', 'Scotiabank Colpatria', 'Banco Caja Social', 'Banco AV Villas', 'Banco Popular', 'Nequi', 'Daviplata', 'Nu Colombia', 'Lulo Bank'],
-  MX: ['BBVA México', 'Banamex', 'Santander', 'Banorte', 'HSBC', 'Scotiabank', 'Inbursa', 'Banco Azteca'],
+  MX: ['BBVA México', 'Banamex', 'Santander', 'Banorte', 'HSBC', 'Scotiabank', 'Inbursa', 'Banco Azteca', 'Nu México'],
   US: ['Chase', 'Bank of America', 'Wells Fargo', 'Citibank', 'U.S. Bank', 'PNC Bank', 'Capital One'],
   ES: ['Banco Santander', 'BBVA', 'CaixaBank', 'Banco Sabadell', 'Bankinter', 'Unicaja Banco'],
   AR: ['Banco Galicia', 'Banco Nación', 'Banco Santander Río', 'BBVA Francés', 'Banco Macro', 'HSBC'],
@@ -826,18 +826,452 @@ const DashboardView = ({ totalIncome, totalExpenses, healthScore, categoryStats,
 };
 
 // ... (IncomeView, DebtsView, FamilyView, SettingsView, ExpensesView, MemberEditModal - Mantienen su lógica)
-const IncomeView = ({ members, updateMembers, currency, triggerCurrencyModal, isAdding, onClose, triggerConfirm }) => { const [newSource, setNewSource] = useState({ memberId: '', source: '', amount: '', isVariable: false }); const [editingIncome, setEditingIncome] = useState(null); useEffect(() => { let isVar = false; for (const [category, sources] of Object.entries(INCOME_SOURCES)) { if (sources.includes(newSource.source)) { if (INCOME_DEFAULTS[category]) isVar = true; break; } } setNewSource(prev => ({ ...prev, isVariable: isVar })); }, [newSource.source]); const handleAddSource = () => { const totalIncome = members.reduce((acc, m) => acc + (m.incomes?.reduce((s, i) => s + i.amount, 0) || 0), 0); if (totalIncome === 0 && !editingIncome) triggerCurrencyModal(); if (newSource.memberId && newSource.source && newSource.amount) { const updatedMembers = members.map(m => { if (m.id === parseInt(newSource.memberId)) { if (editingIncome) { const updatedIncomes = m.incomes.map(inc => inc.id === editingIncome.id ? { ...inc, source: newSource.source, amount: parseFloat(newSource.amount), isVariable: newSource.isVariable } : inc); return { ...m, incomes: updatedIncomes }; } return { ...m, incomes: [...(m.incomes || []), { id: Date.now(), source: newSource.source, amount: parseFloat(newSource.amount), isVariable: newSource.isVariable }] }; } return m; }); updateMembers(updatedMembers); onClose(); setNewSource({ ...newSource, source: '', amount: '', isVariable: false }); setEditingIncome(null); } }; const handleEditClick = (memberId, income) => { setNewSource({ memberId: memberId, source: income.source, amount: income.amount, isVariable: income.isVariable }); setEditingIncome(income); }; const handleRemoveSource = (memberId, sourceId) => { triggerConfirm('¿Estás seguro de eliminar este ingreso?', () => { const updatedMembers = members.map(m => { if (m.id === memberId) { const currentIncomes = m.incomes || []; return { ...m, incomes: currentIncomes.filter(i => i.id !== sourceId) }; } return m; }); updateMembers(updatedMembers); }); }; const totalFamilyIncome = members.reduce((acc, m) => acc + (m.incomes?.reduce((s, i) => s + i.amount, 0) || 0), 0); return (<div className="space-y-6 animate-fade-in pb-20"><div className="flex items-center justify-between mb-2"><h2 className="text-2xl font-bold text-gray-800">Ingresos Familiares</h2></div><p className="text-sm text-gray-500 mb-4">Añade todas las fuentes de ingreso de tu hogar.</p><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{members.map(member => (<div key={member.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm h-full"><div className="flex items-center space-x-3 mb-3 border-b border-gray-100 pb-2"><div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-lg">{member.avatar}</div><p className="font-bold text-gray-900">{member.name}</p></div><div className="space-y-2">{(member.incomes || []).map(inc => (<div key={inc.id} className="flex justify-between items-center text-sm group"><div className="flex items-center gap-1.5"><span className="text-gray-600">{inc.source}</span>{inc.isVariable ? <Waves className="w-3 h-3 text-indigo-400" title="Variable" /> : <Equal className="w-3 h-3 text-emerald-400" title="Fijo" />}</div><div className="flex items-center gap-2"><span className="font-bold text-emerald-700">{currency} {formatCurrencyInput(inc.amount)}</span><button onClick={(e) => { e.stopPropagation(); handleEditClick(member.id, inc); }} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors" aria-label="Editar ingreso"><Pencil className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); handleRemoveSource(member.id, inc.id); }} className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors" aria-label="Eliminar ingreso"><Trash2 className="w-4 h-4" /></button></div></div>))}{(member.incomes || []).length === 0 && <p className="text-xs text-gray-400 italic">Sin ingresos registrados.</p>}</div></div>))}</div><div className="bg-emerald-50 p-4 rounded-xl mt-6"><div className="flex justify-between items-center"><span className="text-emerald-800 font-medium">Total Familiar</span><span className="text-2xl font-bold text-emerald-700">{currency} {formatCurrencyInput(totalFamilyIncome)}</span></div></div>{(isAdding || editingIncome) && ReactDOM.createPortal(<div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in"><div className="bg-white w-full max-w-md rounded-2xl p-6 animate-slide-up"><h3 className="font-bold text-lg mb-4">{editingIncome ? 'Editar Ingreso' : 'Nuevo Ingreso'}</h3><div className="space-y-3"><select className="w-full border p-2 rounded-lg bg-white" value={newSource.memberId} onChange={e => setNewSource({ ...newSource, memberId: e.target.value })} disabled={!!editingIncome}><option value="">Selecciona Miembro</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select><select className="w-full border p-2 rounded-lg bg-white" value={newSource.source} onChange={e => setNewSource({ ...newSource, source: e.target.value })}><option value="">Selecciona Fuente de Ingreso</option>{Object.keys(INCOME_SOURCES).map(category => (<optgroup key={category} label={category}>{INCOME_SOURCES[category].map(source => (<option key={source} value={source}>{source}</option>))}</optgroup>))}</select><div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-gray-500">Tipo:</span><button type="button" onClick={() => setNewSource({ ...newSource, isVariable: false })} className={`px-2 py-1 text-xs rounded border ${!newSource.isVariable ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'text-gray-400'}`}>Fijo</button><button type="button" onClick={() => setNewSource({ ...newSource, isVariable: true })} className={`px-2 py-1 text-xs rounded border ${newSource.isVariable ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'text-gray-400'}`}>Variable</button></div><input type="text" placeholder={newSource.isVariable ? "Promedio Mensual / Estimado" : "Monto Mensual"} className="w-full border p-2 rounded-lg" value={formatCurrencyInput(newSource.amount)} onChange={e => setNewSource({ ...newSource, amount: parseCurrencyInput(e.target.value) })} /><div className="flex gap-2 mt-4"><button onClick={() => { onClose(); setEditingIncome(null); }} className="flex-1 py-2 text-gray-500">Cancelar</button><button onClick={handleAddSource} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold">{editingIncome ? 'Actualizar' : 'Agregar'}</button></div></div></div></div>, document.body)}</div>); };
+const IncomeView = ({ members, updateMembers, currency, triggerCurrencyModal, isAdding, onClose, triggerConfirm }) => {
+  const [newSource, setNewSource] = useState({ memberId: '', source: '', amount: '', isVariable: false });
+  const [editingIncome, setEditingIncome] = useState(null);
+
+  useEffect(() => {
+    let isVar = false;
+    // US-09: Auto-classification based on group defaults
+    for (const [category, sources] of Object.entries(INCOME_SOURCES)) {
+      if (sources.includes(newSource.source)) {
+        if (INCOME_DEFAULTS[category]) isVar = true;
+        break;
+      }
+    }
+    setNewSource(prev => ({ ...prev, isVariable: isVar }));
+  }, [newSource.source]);
+
+  const handleAddSource = () => {
+    const totalIncome = members.reduce((acc, m) => acc + (m.incomes?.reduce((s, i) => s + i.amount, 0) || 0), 0);
+    if (totalIncome === 0 && !editingIncome) triggerCurrencyModal();
+
+    if (newSource.memberId && newSource.source && newSource.amount) {
+      const updatedMembers = members.map(m => {
+        if (m.id === parseInt(newSource.memberId)) {
+          if (editingIncome) {
+            const updatedIncomes = m.incomes.map(inc => inc.id === editingIncome.id ? { ...inc, source: newSource.source, amount: parseFloat(newSource.amount), isVariable: newSource.isVariable } : inc);
+            return { ...m, incomes: updatedIncomes };
+          }
+          return { ...m, incomes: [...(m.incomes || []), { id: Date.now(), source: newSource.source, amount: parseFloat(newSource.amount), isVariable: newSource.isVariable }] };
+        }
+        return m;
+      });
+      updateMembers(updatedMembers);
+      onClose();
+      setNewSource({ ...newSource, source: '', amount: '', isVariable: false });
+      setEditingIncome(null);
+    }
+  };
+
+  const handleEditClick = (memberId, income) => {
+    setNewSource({ memberId: memberId, source: income.source, amount: income.amount, isVariable: income.isVariable });
+    setEditingIncome(income);
+  };
+
+  const handleRemoveSource = (memberId, sourceId) => {
+    triggerConfirm('¿Estás seguro de eliminar este ingreso?', () => {
+      const updatedMembers = members.map(m => {
+        if (m.id === memberId) {
+          const currentIncomes = m.incomes || [];
+          return { ...m, incomes: currentIncomes.filter(i => i.id !== sourceId) };
+        }
+        return m;
+      });
+      updateMembers(updatedMembers);
+    });
+  };
+
+  const totalFamilyIncome = members.reduce((acc, m) => acc + (m.incomes?.reduce((s, i) => s + i.amount, 0) || 0), 0);
+
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <div className="flex items-center justify-between mb-2"><h2 className="text-2xl font-bold text-gray-800">Ingresos Familiares</h2></div>
+      <p className="text-sm text-gray-500 mb-4">Añade todas las fuentes de ingreso de tu hogar.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {members.map(member => (
+          <div key={member.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm h-full">
+            <div className="flex items-center space-x-3 mb-3 border-b border-gray-100 pb-2">
+              <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-lg">{member.avatar}</div>
+              <p className="font-bold text-gray-900">{member.name}</p>
+            </div>
+            <div className="space-y-2">
+              {(member.incomes || []).map(inc => (
+                <div key={inc.id} className="flex justify-between items-center text-sm group">
+                  <div className="flex items-center gap-1.5"><span className="text-gray-600">{inc.source}</span>{inc.isVariable ? <Waves className="w-3 h-3 text-indigo-400" title="Variable" /> : <Equal className="w-3 h-3 text-emerald-400" title="Fijo" />}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-emerald-700">{currency} {formatCurrencyInput(inc.amount)}</span>
+                    <button onClick={(e) => { e.stopPropagation(); handleEditClick(member.id, inc); }} className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors" aria-label="Editar ingreso"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleRemoveSource(member.id, inc.id); }} className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors" aria-label="Eliminar ingreso"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              ))}
+              {(member.incomes || []).length === 0 && <p className="text-xs text-gray-400 italic">Sin ingresos registrados.</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-emerald-50 p-4 rounded-xl mt-6">
+        <div className="flex justify-between items-center"><span className="text-emerald-800 font-medium">Total Familiar</span><span className="text-2xl font-bold text-emerald-700">{currency} {formatCurrencyInput(totalFamilyIncome)}</span></div>
+      </div>
+      {(isAdding || editingIncome) && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 animate-slide-up">
+            <h3 className="font-bold text-lg mb-4">{editingIncome ? 'Editar Ingreso' : 'Nuevo Ingreso'}</h3>
+            <div className="space-y-3">
+              <select className="w-full border p-2 rounded-lg bg-white" value={newSource.memberId} onChange={e => setNewSource({ ...newSource, memberId: e.target.value })} disabled={!!editingIncome}><option value="">Selecciona Miembro</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+              <select className="w-full border p-2 rounded-lg bg-white" value={newSource.source} onChange={e => setNewSource({ ...newSource, source: e.target.value })}>
+                <option value="">Selecciona Fuente de Ingreso</option>
+                {Object.keys(INCOME_SOURCES).map(category => (
+                  <optgroup key={category} label={category}>
+                    {INCOME_SOURCES[category].map(source => (<option key={source} value={source}>{source}</option>))}
+                  </optgroup>
+                ))}
+              </select>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-gray-500">Tipo:</span>
+                <button type="button" onClick={() => setNewSource({ ...newSource, isVariable: false })} className={`px-2 py-1 text-xs rounded border ${!newSource.isVariable ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'text-gray-400'}`}>Fijo</button>
+                <button type="button" onClick={() => setNewSource({ ...newSource, isVariable: true })} className={`px-2 py-1 text-xs rounded border ${newSource.isVariable ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'text-gray-400'}`}>Variable</button>
+              </div>
+              <input type="text" placeholder={newSource.isVariable ? "Promedio Mensual / Estimado" : "Monto Mensual"} className="w-full border p-2 rounded-lg" value={formatCurrencyInput(newSource.amount)} onChange={e => setNewSource({ ...newSource, amount: parseCurrencyInput(e.target.value) })} />
+              <div className="flex gap-2 mt-4"><button onClick={() => { onClose(); setEditingIncome(null); }} className="flex-1 py-2 text-gray-500">Cancelar</button><button onClick={handleAddSource} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold">{editingIncome ? 'Actualizar' : 'Agregar'}</button></div>
+            </div>
+          </div>
+        </div>, document.body
+      )}
+    </div>
+  );
+};
 const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settings, addExpense, triggerConfirm }) => {
-  const [activeTab, setActiveTab] = useState('cards'); const [newItem, setNewItem] = useState({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' }); const [cardPaymentModal, setCardPaymentModal] = useState(null); const [paymentAmount, setPaymentAmount] = useState(''); const handleAddItem = (e) => { e.preventDefault(); const updatedMembers = members.map(m => { if (m.id === parseInt(newItem.ownerId)) { if (activeTab === 'cards') { return { ...m, cards: [...(m.cards || []), { id: Date.now(), name: 'Tarjeta', last4: newItem.last4, cutoffDate: newItem.cutoffDate }] }; } else { return { ...m, loans: [...(m.loans || []), { id: Date.now(), type: newItem.type, customName: newItem.customName, entityName: newItem.entityName, totalValue: parseFloat(newItem.totalValue), monthlyPayment: parseFloat(newItem.monthlyPayment), term: newItem.term, rate: newItem.rate, rateType: newItem.rateType, isAutoDebit: newItem.isAutoDebit, disbursementDate: newItem.disbursementDate }] }; } } return m; }); updateMembers(updatedMembers); onClose(); setNewItem({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' }); };
-  const handleDeleteItem = (memberId, itemId, type) => { triggerConfirm('¿Estás seguro de eliminar este elemento?', () => { const updatedMembers = members.map(m => { if (m.id === memberId) { if (type === 'card') return { ...m, cards: m.cards.filter(c => c.id !== itemId) }; if (type === 'loan') return { ...m, loans: m.loans.filter(l => l.id !== itemId) }; } return m; }); updateMembers(updatedMembers); }); };
-  const handleSaveCardPayment = () => { if (!paymentAmount) return alert("Ingresa monto"); const todayDate = new Date().toISOString().split('T')[0]; const newExpense = { title: `Pago Tarjeta ${cardPaymentModal.name} (**${cardPaymentModal.last4})`, amount: parseFloat(parseCurrencyInput(paymentAmount)), category: 'deudas', dueDate: todayDate, responsibleId: cardPaymentModal.ownerId, isAutoDebit: false, isRecurring: false, type: 'bill' }; addExpense(newExpense); setCardPaymentModal(null); setPaymentAmount(''); alert("Pago registrado en Gastos del mes."); };
-  const bankOptions = settings.country === 'CO' ? BANKS_BY_COUNTRY.CO : BANKS_BY_COUNTRY[settings.country] || []; return (<div className="space-y-6 animate-fade-in pb-20"><div className="flex items-center justify-between mb-2"><h2 className="text-2xl font-bold text-gray-800">Deudas & Tarjetas</h2></div><div className="flex p-1 bg-gray-100 rounded-xl"><button onClick={() => setActiveTab('cards')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'cards' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Tarjetas</button><button onClick={() => setActiveTab('loans')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'loans' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Préstamos</button></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{members.map(member => { const items = activeTab === 'cards' ? (member.cards || []) : (member.loans || []); if (items.length === 0) return null; return (<div key={member.id} className="h-full"><h3 className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1">{member.name}</h3><div className="space-y-3">{items.map(item => (<div key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm relative"><button onClick={(e) => { e.stopPropagation(); handleDeleteItem(member.id, item.id, activeTab === 'cards' ? 'card' : 'loan'); }} className="absolute top-2 right-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>{activeTab === 'cards' ? (<div><div className="flex items-center mb-3"><div className="bg-blue-50 p-2 rounded-lg mr-3"><CardIcon className="w-5 h-5 text-blue-600" /></div><div><p className="font-bold text-gray-800">**** {item.last4}</p><p className="text-xs text-gray-500">Corte: Día {item.cutoffDate}</p></div></div><button onClick={() => setCardPaymentModal({ ...item, ownerId: member.id })} className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2"><Banknote className="w-3 h-3" /> Registrar Pago del Mes</button></div>) : (<div><div className="flex items-center justify-between mb-2"><div className="flex items-center overflow-hidden"><div className="bg-red-50 p-1.5 rounded-lg mr-2 flex-shrink-0"><Landmark className="w-4 h-4 text-red-600" /></div><div className="truncate"><span className="font-bold text-gray-800 block truncate">{item.customName || item.type}</span><span className="text-[10px] text-gray-500">{item.entityName}</span></div></div>{item.isAutoDebit && <span className="ml-2 text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded flex-shrink-0">Auto</span>}</div><div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600"><div>Desembolso: <span className="font-medium text-gray-900">{currency} {formatCurrencyInput(item.totalValue)}</span></div><div>Cuota: <span className="font-medium text-gray-900">{currency} {formatCurrencyInput(item.monthlyPayment)}</span></div><div>Plazo: {item.term} meses</div><div>Tasa: {item.rate}% {item.rateType}</div><div>Fecha: {item.disbursementDate}</div></div></div>)}</div>))}</div></div>); })}{members.every(m => (activeTab === 'cards' ? m.cards.length : m.loans.length) === 0) && (<div className="col-span-full text-center py-10 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">No hay {activeTab === 'cards' ? 'tarjetas' : 'préstamos'} registrados.</div>)}</div>{isAdding && ReactDOM.createPortal(<div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in"><div className="bg-white w-full max-w-md rounded-2xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg">Agregar {activeTab === 'cards' ? 'Tarjeta' : 'Préstamo'}</h3><button onClick={onClose}><X className="w-6 h-6 text-gray-400" /></button></div><form onSubmit={handleAddItem} className="space-y-4"><div><label className="block text-sm font-medium mb-1">Titular</label><select className="w-full border p-2 rounded-lg bg-white" value={newItem.ownerId} onChange={e => setNewItem({ ...newItem, ownerId: e.target.value })}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>{activeTab === 'cards' ? (<div className="flex gap-4"><div className="flex-1"><label className="block text-sm font-medium mb-1">Últimos 4 dígitos</label><input required maxLength="4" className="w-full border p-2 rounded-lg" placeholder="4242" value={newItem.last4} onChange={e => setNewItem({ ...newItem, last4: e.target.value })} /></div><div className="flex-1"><label className="block text-sm font-medium mb-1">Día de Corte</label><input required type="number" min="1" max="31" className="w-full border p-2 rounded-lg" placeholder="15" value={newItem.cutoffDate} onChange={e => setNewItem({ ...newItem, cutoffDate: e.target.value })} /></div></div>) : (<><div className="p-3 bg-gray-50 rounded-lg border border-gray-100"><label className="block text-xs font-bold text-gray-500 uppercase mb-2">¿Quién presta el dinero?</label><div className="flex gap-2 mb-3"><button type="button" onClick={() => setNewItem({ ...newItem, entityType: 'bank' })} className={`flex-1 py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${newItem.entityType === 'bank' ? 'bg-white shadow text-emerald-700 border border-emerald-200' : 'text-gray-500'}`}><Building2 className="w-3 h-3" /> Entidad Bancaria</button><button type="button" onClick={() => setNewItem({ ...newItem, entityType: 'person' })} className={`flex-1 py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${newItem.entityType === 'person' ? 'bg-white shadow text-indigo-700 border border-indigo-200' : 'text-gray-500'}`}><UserCircle className="w-3 h-3" /> Persona Natural</button></div>{newItem.entityType === 'bank' && bankOptions.length > 0 ? (<select className="w-full border p-2 rounded-lg bg-white text-sm" value={newItem.entityName} onChange={e => setNewItem({ ...newItem, entityName: e.target.value })}><option value="">Selecciona Banco</option>{bankOptions.map(bank => <option key={bank} value={bank}>{bank}</option>)}</select>) : (<input className="w-full border p-2 rounded-lg text-sm" placeholder={newItem.entityType === 'bank' ? "Nombre del Banco" : "Nombre de la Persona"} value={newItem.entityName} onChange={e => setNewItem({ ...newItem, entityName: e.target.value })} />)}</div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium mb-1">Tipo de Préstamo</label><select className="w-full border p-2 rounded-lg text-sm bg-white" value={newItem.type} onChange={e => setNewItem({ ...newItem, type: e.target.value })}><option>Libre inversión</option><option>Cupo rotativo</option><option>Hipotecario</option><option>Vehículo</option><option>Educativo</option></select></div><div><label className="block text-xs font-medium mb-1">Nombre (Opcional)</label><input className="w-full border p-2 rounded-lg text-sm" placeholder="Ej. Moto" value={newItem.customName} onChange={e => setNewItem({ ...newItem, customName: e.target.value })} /></div></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium mb-1">Monto Desembolsado</label><input required type="text" className="w-full border p-2 rounded-lg text-sm" value={formatCurrencyInput(newItem.totalValue)} onChange={e => setNewItem({ ...newItem, totalValue: parseCurrencyInput(e.target.value) })} /></div><div><label className="block text-xs font-medium mb-1">Valor Cuota</label><input required type="text" className="w-full border p-2 rounded-lg text-sm" value={formatCurrencyInput(newItem.monthlyPayment)} onChange={e => setNewItem({ ...newItem, monthlyPayment: parseCurrencyInput(e.target.value) })} /></div></div><div className="grid grid-cols-3 gap-3"><div className="col-span-1"><label className="block text-xs font-medium mb-1">Plazo (Meses)</label><input type="number" className="w-full border p-2 rounded-lg text-sm" value={newItem.term} onChange={e => setNewItem({ ...newItem, term: e.target.value })} /></div><div className="col-span-2"><label className="block text-xs font-medium mb-1">Tasa de Interés</label><div className="flex"><input type="number" className="w-full border-y border-l rounded-l-lg p-2 text-sm" placeholder="1.5" value={newItem.rate} onChange={e => setNewItem({ ...newItem, rate: e.target.value })} /><select className="border rounded-r-lg bg-gray-50 text-xs px-1" value={newItem.rateType} onChange={e => setNewItem({ ...newItem, rateType: e.target.value })}><option value="EA">% E.A.</option><option value="MV">% M.V.</option></select></div></div></div><div><label className="block text-xs font-medium mb-1">Fecha de Desembolso</label><input type="date" className="w-full border p-2 rounded-lg text-sm" value={newItem.disbursementDate} onChange={e => setNewItem({ ...newItem, disbursementDate: e.target.value })} /></div><div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100"><span className="text-sm font-medium">Débito Automático</span><input type="checkbox" checked={newItem.isAutoDebit} onChange={e => setNewItem({ ...newItem, isAutoDebit: e.target.checked })} className="w-5 h-5 accent-indigo-500" /></div></>)}<button type="submit" className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold mt-2">Guardar</button></form></div></div>, document.body)}
-    {cardPaymentModal && ReactDOM.createPortal(<div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in"><div className="bg-white w-full max-w-sm rounded-2xl p-6 animate-slide-up"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg">Pago de Tarjeta</h3><button onClick={() => setCardPaymentModal(null)}><X className="w-6 h-6 text-gray-400" /></button></div><p className="text-sm text-gray-500 mb-4">Registra el pago de este mes para la tarjeta <strong>**** {cardPaymentModal.last4}</strong>.</p><div className="space-y-4"><div><label className="block text-sm font-medium mb-1">Valor a Pagar ({currency})</label><input autoFocus type="text" className="w-full border p-3 rounded-xl text-lg font-bold" placeholder="0" value={formatCurrencyInput(paymentAmount)} onChange={e => setPaymentAmount(parseCurrencyInput(e.target.value))} /></div><button onClick={handleSaveCardPayment} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold mt-2">Registrar Pago</button></div></div></div>, document.body)}
-  </div>);
+  const [activeTab, setActiveTab] = useState('cards');
+  const [newItem, setNewItem] = useState({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' });
+  const [cardPaymentModal, setCardPaymentModal] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+
+  const handleAddItem = (e) => {
+    e.preventDefault();
+    const updatedMembers = members.map(m => {
+      if (m.id === parseInt(newItem.ownerId)) {
+        if (activeTab === 'cards') {
+          return { ...m, cards: [...(m.cards || []), { id: Date.now(), name: 'Tarjeta', last4: newItem.last4, cutoffDate: newItem.cutoffDate }] };
+        } else {
+          return { ...m, loans: [...(m.loans || []), { id: Date.now(), type: newItem.type, customName: newItem.customName, entityName: newItem.entityName, totalValue: parseFloat(newItem.totalValue), monthlyPayment: parseFloat(newItem.monthlyPayment), term: newItem.term, rate: newItem.rate, rateType: newItem.rateType, isAutoDebit: newItem.isAutoDebit, disbursementDate: newItem.disbursementDate }] };
+        }
+      }
+      return m;
+    });
+    updateMembers(updatedMembers);
+    onClose();
+    setNewItem({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' });
+  };
+
+  const handleDeleteItem = (memberId, itemId, type) => {
+    triggerConfirm('¿Estás seguro de eliminar este elemento?', () => {
+      const updatedMembers = members.map(m => {
+        if (m.id === memberId) {
+          if (type === 'card') return { ...m, cards: m.cards.filter(c => c.id !== itemId) };
+          if (type === 'loan') return { ...m, loans: m.loans.filter(l => l.id !== itemId) };
+        }
+        return m;
+      });
+      updateMembers(updatedMembers);
+    });
+  };
+
+  const handleSaveCardPayment = () => {
+    if (!paymentAmount) return alert("Ingresa monto");
+    const todayDate = new Date().toISOString().split('T')[0];
+    const newExpense = { title: `Pago Tarjeta ${cardPaymentModal.name} (**${cardPaymentModal.last4})`, amount: parseFloat(parseCurrencyInput(paymentAmount)), category: 'deudas', dueDate: todayDate, responsibleId: cardPaymentModal.ownerId, isAutoDebit: false, isRecurring: false, type: 'bill' };
+    addExpense(newExpense);
+    setCardPaymentModal(null);
+    setPaymentAmount('');
+    alert("Pago registrado en Gastos del mes.");
+  };
+
+  const bankOptions = settings.country === 'CO' ? BANKS_BY_COUNTRY.CO : (BANKS_BY_COUNTRY[settings.country] || []);
+
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-gray-800">Deudas & Tarjetas</h2>
+      </div>
+      <div className="flex p-1 bg-gray-100 rounded-xl">
+        <button onClick={() => setActiveTab('cards')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'cards' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Tarjetas</button>
+        <button onClick={() => setActiveTab('loans')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'loans' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Préstamos</button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {members.map(member => {
+          const items = activeTab === 'cards' ? (member.cards || []) : (member.loans || []);
+          if (items.length === 0) return null;
+          return (
+            <div key={member.id} className="h-full">
+              <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1">{member.name}</h3>
+              <div className="space-y-3">
+                {items.map(item => (
+                  <div key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm relative">
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(member.id, item.id, activeTab === 'cards' ? 'card' : 'loan'); }} className="absolute top-2 right-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                    {activeTab === 'cards' ? (
+                      <div>
+                        <div className="flex items-center mb-3">
+                          <div className="bg-blue-50 p-2 rounded-lg mr-3"><CardIcon className="w-5 h-5 text-blue-600" /></div>
+                          <div><p className="font-bold text-gray-800">**** {item.last4}</p><p className="text-xs text-gray-500">Corte: Día {item.cutoffDate}</p></div>
+                        </div>
+                        <button onClick={() => setCardPaymentModal({ ...item, ownerId: member.id })} className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2"><Banknote className="w-3 h-3" /> Registrar Pago del Mes</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center overflow-hidden">
+                            <div className="bg-red-50 p-1.5 rounded-lg mr-2 flex-shrink-0"><Landmark className="w-4 h-4 text-red-600" /></div>
+                            <div className="truncate">
+                              <span className="font-bold text-gray-800 block truncate">{item.customName || item.type}</span>
+                              <span className="text-[10px] text-gray-500">{item.entityName}</span>
+                            </div>
+                          </div>
+                          {item.isAutoDebit && <span className="ml-2 text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded flex-shrink-0">Auto</span>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
+                          <div>Desembolso: <span className="font-medium text-gray-900">{currency} {formatCurrencyInput(item.totalValue)}</span></div>
+                          <div>Cuota: <span className="font-medium text-gray-900">{currency} {formatCurrencyInput(item.monthlyPayment)}</span></div>
+                          <div>Plazo: {item.term} meses</div>
+                          <div>Tasa: {item.rate}% {item.rateType}</div>
+                          <div>Fecha: {item.disbursementDate}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {members.every(m => (activeTab === 'cards' ? m.cards.length : m.loans.length) === 0) && (
+          <div className="col-span-full text-center py-10 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">No hay {activeTab === 'cards' ? 'tarjetas' : 'préstamos'} registrados.</div>
+        )}
+      </div>
+      {isAdding && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg">Agregar {activeTab === 'cards' ? 'Tarjeta' : 'Préstamo'}</h3><button onClick={onClose}><X className="w-6 h-6 text-gray-400" /></button></div>
+            <form onSubmit={handleAddItem} className="space-y-4">
+              <div><label className="block text-sm font-medium mb-1">Titular</label><select className="w-full border p-2 rounded-lg bg-white" value={newItem.ownerId} onChange={e => setNewItem({ ...newItem, ownerId: e.target.value })}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+              {activeTab === 'cards' ? (
+                <div className="flex gap-4">
+                  <div className="flex-1"><label className="block text-sm font-medium mb-1">Últimos 4 dígitos</label><input required maxLength="4" className="w-full border p-2 rounded-lg" placeholder="4242" value={newItem.last4} onChange={e => setNewItem({ ...newItem, last4: e.target.value })} /></div>
+                  <div className="flex-1"><label className="block text-sm font-medium mb-1">Día de Corte</label><input required type="number" min="1" max="31" className="w-full border p-2 rounded-lg" placeholder="15" value={newItem.cutoffDate} onChange={e => setNewItem({ ...newItem, cutoffDate: e.target.value })} /></div>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">¿Quién presta el dinero?</label>
+                    <div className="flex gap-2 mb-3">
+                      <button type="button" onClick={() => setNewItem({ ...newItem, entityType: 'bank' })} className={`flex-1 py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${newItem.entityType === 'bank' ? 'bg-white shadow text-emerald-700 border border-emerald-200' : 'text-gray-500'}`}><Building2 className="w-3 h-3" /> Entidad Bancaria</button>
+                      <button type="button" onClick={() => setNewItem({ ...newItem, entityType: 'person' })} className={`flex-1 py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${newItem.entityType === 'person' ? 'bg-white shadow text-indigo-700 border border-indigo-200' : 'text-gray-500'}`}><UserCircle className="w-3 h-3" /> Persona Natural</button>
+                    </div>
+                    {newItem.entityType === 'bank' && bankOptions.length > 0 ? (
+                      <select className="w-full border p-2 rounded-lg bg-white text-sm" value={newItem.entityName} onChange={e => setNewItem({ ...newItem, entityName: e.target.value })}><option value="">Selecciona Banco</option>{bankOptions.map(bank => <option key={bank} value={bank}>{bank}</option>)}</select>
+                    ) : (
+                      <input className="w-full border p-2 rounded-lg text-sm" placeholder={newItem.entityType === 'bank' ? "Nombre del Banco" : "Nombre de la Persona"} value={newItem.entityName} onChange={e => setNewItem({ ...newItem, entityName: e.target.value })} />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-xs font-medium mb-1">Tipo de Préstamo</label><select className="w-full border p-2 rounded-lg text-sm bg-white" value={newItem.type} onChange={e => setNewItem({ ...newItem, type: e.target.value })}><option>Libre inversión</option><option>Cupo rotativo</option><option>Hipotecario</option><option>Vehículo</option><option>Educativo</option></select></div>
+                    <div><label className="block text-xs font-medium mb-1">Nombre (Opcional)</label><input className="w-full border p-2 rounded-lg text-sm" placeholder="Ej. Moto" value={newItem.customName} onChange={e => setNewItem({ ...newItem, customName: e.target.value })} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-xs font-medium mb-1">Monto Desembolsado</label><input required type="text" className="w-full border p-2 rounded-lg text-sm" value={formatCurrencyInput(newItem.totalValue)} onChange={e => setNewItem({ ...newItem, totalValue: parseCurrencyInput(e.target.value) })} /></div>
+                    <div><label className="block text-xs font-medium mb-1">Valor Cuota</label><input required type="text" className="w-full border p-2 rounded-lg text-sm" value={formatCurrencyInput(newItem.monthlyPayment)} onChange={e => setNewItem({ ...newItem, monthlyPayment: parseCurrencyInput(e.target.value) })} /></div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-1"><label className="block text-xs font-medium mb-1">Plazo (Meses)</label><input type="number" className="w-full border p-2 rounded-lg text-sm" value={newItem.term} onChange={e => setNewItem({ ...newItem, term: e.target.value })} /></div>
+                    <div className="col-span-2"><label className="block text-xs font-medium mb-1">Tasa de Interés</label><div className="flex"><input type="number" className="w-full border-y border-l rounded-l-lg p-2 text-sm" placeholder="1.5" value={newItem.rate} onChange={e => setNewItem({ ...newItem, rate: e.target.value })} /><select className="border rounded-r-lg bg-gray-50 text-xs px-1" value={newItem.rateType} onChange={e => setNewItem({ ...newItem, rateType: e.target.value })}><option value="EA">% E.A.</option><option value="MV">% M.V.</option></select></div></div>
+                  </div>
+                  <div><label className="block text-xs font-medium mb-1">Fecha de Desembolso</label><input type="date" className="w-full border p-2 rounded-lg text-sm" value={newItem.disbursementDate} onChange={e => setNewItem({ ...newItem, disbursementDate: e.target.value })} /></div>
+                  <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100"><span className="text-sm font-medium">Débito Automático</span><input type="checkbox" checked={newItem.isAutoDebit} onChange={e => setNewItem({ ...newItem, isAutoDebit: e.target.checked })} className="w-5 h-5 accent-indigo-500" /></div>
+                </>
+              )}
+              <button type="submit" className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold mt-2">Guardar</button>
+            </form>
+          </div>
+        </div>, document.body
+      )}
+      {cardPaymentModal && ReactDOM.createPortal(<div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in"><div className="bg-white w-full max-w-sm rounded-2xl p-6 animate-slide-up"><div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg">Pago de Tarjeta</h3><button onClick={() => setCardPaymentModal(null)}><X className="w-6 h-6 text-gray-400" /></button></div><p className="text-sm text-gray-500 mb-4">Registra el pago de este mes para la tarjeta <strong>**** {cardPaymentModal.last4}</strong>.</p><div className="space-y-4"><div><label className="block text-sm font-medium mb-1">Valor a Pagar ({currency})</label><input autoFocus type="text" className="w-full border p-3 rounded-xl text-lg font-bold" placeholder="0" value={formatCurrencyInput(paymentAmount)} onChange={e => setPaymentAmount(parseCurrencyInput(e.target.value))} /></div><button onClick={handleSaveCardPayment} className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold mt-2">Registrar Pago</button></div></div></div>, document.body)}
+    </div>
+  );
 };
 
-const FamilyView = ({ members, updateMembers, triggerConfirm }) => { const handleAddMember = () => { const newId = members.length > 0 ? Math.max(...members.map(m => m.id)) + 1 : 1; const newMember = { id: newId, name: 'Nuevo Miembro', role: 'member', incomes: [], avatar: '😊', cards: [], loans: [] }; updateMembers([...members, newMember]); }; const handleRemoveMember = (id) => { triggerConfirm('¿Estás seguro de eliminar este miembro?', () => { updateMembers(members.filter(m => m.id !== id)); }); }; return (<div className="space-y-6 animate-fade-in pb-20"><div className="flex items-center justify-between mb-4"><h2 className="text-2xl font-bold text-gray-800">Grupo Familiar</h2><button onClick={handleAddMember} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-xl transition shadow-lg"><Plus className="w-6 h-6" /></button></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{members.map(member => (<div key={member.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between group relative"><div className="flex items-center space-x-4"><div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner">{member.avatar}</div><div><h3 className="font-bold text-lg text-gray-900">{member.name}</h3><span className={`inline-block px-2 py-1 rounded-lg text-xs font-bold ${member.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>{member.role === 'admin' ? 'Administrador' : 'Miembro'}</span></div></div>{members.length > 1 && (<button onClick={() => handleRemoveMember(member.id)} className="text-gray-300 hover:text-red-500 transition p-2"><Trash2 className="w-5 h-5" /></button>)}</div>))}</div></div>); };
-const SettingsView = ({ settings, setSettings, onLogout }) => { return (<div className="space-y-6 animate-fade-in pb-20"><h2 className="text-2xl font-bold text-gray-800 mb-6">Configuración</h2><div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"><button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition border-b border-gray-100"><div className="flex items-center"><User className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">Mi Perfil</span></div><ArrowRight className="w-5 h-5 text-gray-300" /></button><button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition border-b border-gray-100"><div className="flex items-center"><Bell className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">Notificaciones</span></div><div className="w-12 h-6 bg-emerald-500 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" /></div></button><button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition"><div className="flex items-center"><Shield className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">Seguridad</span></div><ArrowRight className="w-5 h-5 text-gray-300" /></button></div><div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-4"><button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition"><div className="flex items-center"><Globe className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">País</span></div><div className="flex items-center text-gray-500 font-medium"><span className="text-xl mr-2">{COUNTRIES.find(c => c.code === settings.country)?.flag}</span> {settings.country}</div></button></div><button onClick={onLogout} className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-2xl mt-8 flex items-center justify-center hover:bg-red-100 transition"><LogOut className="w-5 h-5 mr-2" /> Cerrar Sesión</button><p className="text-center text-gray-400 text-xs mt-4">Nido App v4.0.0 (Build 20250515)</p></div>); };
+const FamilyView = ({ members, updateMembers, triggerConfirm, status }) => {
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [newMember, setNewMember] = useState({ name: '', email: '', role: 'member' });
+
+  // US-12: Invitation logic with Roles
+  const handleInvite = (e) => {
+    e.preventDefault();
+    if (newMember.name && newMember.email) {
+      // Simulator: Just add to local state
+      const newId = members.length > 0 ? Math.max(...members.map(m => m.id)) + 1 : 1;
+      const mem = {
+        id: newId,
+        name: newMember.name,
+        email: newMember.email,
+        role: newMember.role,
+        incomes: [],
+        avatar: '😊',
+        cards: [],
+        loans: []
+      };
+      updateMembers([...members, mem]);
+      setIsInviteOpen(false);
+      setNewMember({ name: '', email: '', role: 'member' });
+      alert(`Invitación enviada a ${mem.email} con rol ${mem.role === 'admin' ? 'Administrador' : 'Miembro'}`);
+    }
+  };
+
+  const handleRemoveMember = (id) => {
+    triggerConfirm('¿Estás seguro de eliminar este miembro?', () => {
+      updateMembers(members.filter(m => m.id !== id));
+    });
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold text-gray-800">Grupo Familiar</h2>
+        <button onClick={() => setIsInviteOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-xl transition shadow-lg"><Plus className="w-6 h-6" /></button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {members.map(member => (
+          <div key={member.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between group relative">
+            <div className="flex items-center space-x-4">
+              <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner">{member.avatar}</div>
+              <div>
+                <h3 className="font-bold text-lg text-gray-900">{member.name}</h3>
+                <span className={`inline-block px-2 py-1 rounded-lg text-xs font-bold ${member.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                  {member.role === 'admin' ? 'Administrador' : 'Miembro'}
+                </span>
+                {member.email && <p className="text-[10px] text-gray-400">{member.email}</p>}
+              </div>
+            </div>
+            {members.length > 1 && (<button onClick={() => handleRemoveMember(member.id)} className="text-gray-300 hover:text-red-500 transition p-2"><Trash2 className="w-5 h-5" /></button>)}
+          </div>
+        ))}
+      </div>
+
+      {isInviteOpen && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 animate-slide-up">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Invitar Familiar</h3>
+              <button onClick={() => setIsInviteOpen(false)}><X className="w-6 h-6 text-gray-400" /></button>
+            </div>
+            <form onSubmit={handleInvite} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Nombre</label>
+                <input required className="w-full border p-2 rounded-lg" value={newMember.name} onChange={e => setNewMember({ ...newMember, name: e.target.value })} placeholder="Ej. Juan Pérez" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Correo Electrónico</label>
+                <input required type="email" className="w-full border p-2 rounded-lg" value={newMember.email} onChange={e => setNewMember({ ...newMember, email: e.target.value })} placeholder="juan@ejemplo.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Rol</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setNewMember({ ...newMember, role: 'admin' })} className={`p-3 rounded-xl border text-left ${newMember.role === 'admin' ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-200 hover:bg-gray-50'}`}>
+                    <span className="block font-bold text-indigo-700 mb-1">Administrador</span>
+                    <span className="text-xs text-gray-500">Control total: Editar, eliminar y gestionar pagos.</span>
+                  </button>
+                  <button type="button" onClick={() => setNewMember({ ...newMember, role: 'member' })} className={`p-3 rounded-xl border text-left ${newMember.role === 'member' ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500' : 'border-gray-200 hover:bg-gray-50'}`}>
+                    <span className="block font-bold text-emerald-700 mb-1">Miembro</span>
+                    <span className="text-xs text-gray-500">Solo visualización y gestión personal.</span>
+                  </button>
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold mt-2 hover:bg-emerald-700 transition">Enviar Invitación</button>
+            </form>
+          </div>
+        </div>, document.body
+      )}
+    </div>
+  );
+};
+
+const SettingsView = ({ settings, setSettings, onLogout }) => {
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [freq, setFreq] = useState('daily'); // US-13
+
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6">Configuración</h2>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition border-b border-gray-100">
+          <div className="flex items-center"><User className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">Mi Perfil</span></div>
+          <ArrowRight className="w-5 h-5 text-gray-300" />
+        </button>
+
+        <button onClick={() => setShowNotifications(true)} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition border-b border-gray-100">
+          <div className="flex items-center"><Bell className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">Notificaciones</span></div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 capitalize">{freq === 'never' ? 'Nunca' : (freq === 'daily' ? 'Diario' : (freq === 'weekly' ? 'Semanal' : 'Mensual'))}</span>
+            <div className={`w-3 h-3 rounded-full ${freq !== 'never' ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+          </div>
+        </button>
+
+        <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition">
+          <div className="flex items-center"><Shield className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">Seguridad</span></div>
+          <ArrowRight className="w-5 h-5 text-gray-300" />
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-4">
+        <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition">
+          <div className="flex items-center"><Globe className="w-6 h-6 text-gray-500 mr-3" /><span className="font-medium text-gray-700">País</span></div>
+          <div className="flex items-center text-gray-500 font-medium">
+            <span className="text-xl mr-2">{COUNTRIES.find(c => c.code === settings.country)?.flag}</span> {settings.country}
+          </div>
+        </button>
+      </div>
+
+      <button onClick={onLogout} className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-2xl mt-8 flex items-center justify-center hover:bg-red-100 transition">
+        <LogOut className="w-5 h-5 mr-2" /> Cerrar Sesión
+      </button>
+
+      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.1.0 (Build 20251230)</p>
+
+      {/* US-13 Modal Notificaciones */}
+      {showNotifications && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 animate-slide-up">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Frecuencia de Alertas</h3>
+              <button onClick={() => setShowNotifications(false)}><X className="w-6 h-6 text-gray-400" /></button>
+            </div>
+            <div className="space-y-2">
+              {[
+                { id: 'daily', label: 'Diaria', desc: 'Resumen cada mañana a las 8 AM' },
+                { id: 'weekly', label: 'Semanal', desc: 'Resumen los lunes a las 9 AM' },
+                { id: 'monthly', label: 'Mensual', desc: 'Resumen el día 1 de cada mes' },
+                { id: 'never', label: 'Nunca', desc: 'No recibir notificaciones push' }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => { setFreq(opt.id); setShowNotifications(false); }}
+                  className={`w-full text-left p-4 rounded-xl border transition flex items-center justify-between ${freq === opt.id ? 'bg-emerald-50 border-emerald-500' : 'border-gray-100 hover:bg-gray-50'}`}
+                >
+                  <div>
+                    <p className={`font-bold ${freq === opt.id ? 'text-emerald-900' : 'text-gray-800'}`}>{opt.label}</p>
+                    <p className="text-xs text-gray-500">{opt.desc}</p>
+                  </div>
+                  {freq === opt.id && <CheckCircle className="w-5 h-5 text-emerald-600" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>, document.body
+      )}
+    </div>
+  );
+};
 const ExpenseCard = ({ expense, members, toggleStatus, deleteExpense, currency, triggerConfirm }) => {
   const isPaid = expense.status === 'paid';
   const category = CATEGORIES[expense.category] || CATEGORIES.otros;
@@ -1012,6 +1446,20 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
     }
   };
 
+  // Efecto para autoseleccionar recurrencia al cambiar categoría (US-07)
+  useEffect(() => {
+    if (newExpense.category && CATEGORIES[newExpense.category]) {
+      const defaults = CATEGORIES[newExpense.category].defaultRecurrence;
+      if (defaults) {
+        setNewExpense(prev => ({
+          ...prev,
+          isRecurring: defaults.isRecurring,
+          recurrenceType: defaults.type // 'fixed' | 'variable'
+        }));
+      }
+    }
+  }, [newExpense.category]);
+
   return (
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
       <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up sm:animate-none max-h-[90vh] overflow-y-auto">
@@ -1046,14 +1494,16 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Título del Gasto</label>
             <div className="relative">
-              <TypeIcon className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" /> {/* TypeIcon no existe, usar Pencil o Tag */}
-              <input type="text" className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Ej. Netflix, Arriendo" value={newExpense.title} onChange={e => setNewExpense({ ...newExpense, title: e.target.value })} />
+              <Pencil className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+              <input type="text" className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Ej. Netflix, Arriendo" value={newExpense.title} onChange={e => setNewExpense({ ...newExpense, title: e.target.value })} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Monto ({newExpense.currency || '$'})</label>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                {newExpense.recurrenceType === 'variable' ? 'Monto Estimado' : 'Monto'} ({newExpense.currency || '$'})
+              </label>
               <input type="text" className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 px-3 focus:ring-2 focus:ring-emerald-500 outline-none transition font-bold text-gray-800" placeholder="0" value={formatCurrencyInput(newExpense.amount)} onChange={e => setNewExpense({ ...newExpense, amount: parseCurrencyInput(e.target.value) })} />
             </div>
             <div>
@@ -1061,6 +1511,18 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
               <input type="date" className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 px-3 focus:ring-2 focus:ring-emerald-500 outline-none transition text-sm" value={newExpense.dueDate} onChange={e => setNewExpense({ ...newExpense, dueDate: e.target.value })} />
             </div>
           </div>
+
+          {/* Campo extra para Gastos Fijos (US-07) */}
+          {newExpense.isRecurring && newExpense.recurrenceType === 'fixed' && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Día de Llegada de Factura</label>
+              <input
+                type="number" min="1" max="31"
+                className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 px-3 focus:ring-2 focus:ring-emerald-500 outline-none transition"
+                placeholder="Ej. 15 (Para recordarte que ya debió llegar)"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Responsable</label>
@@ -1091,17 +1553,18 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          {/* Toggle Recurrencia Manual */}
+          <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-200">
             <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="recurring"
-                checked={newExpense.isRecurring}
-                onChange={e => setNewExpense({ ...newExpense, isRecurring: e.target.checked })}
-                className="w-5 h-5 accent-emerald-600 rounded mr-2"
-              />
-              <label htmlFor="recurring" className="text-sm text-gray-700">Gasto Recurrente (Mes a Mes)</label>
+              <Repeat className="w-5 h-5 text-blue-500 mr-3" />
+              <span className="text-sm font-bold text-gray-700">¿Es un gasto recurrente?</span>
             </div>
+            <input
+              type="checkbox"
+              checked={newExpense.isRecurring}
+              onChange={e => setNewExpense({ ...newExpense, isRecurring: e.target.checked })}
+              className="w-5 h-5 accent-emerald-500"
+            />
           </div>
 
           <button onClick={onSubmit} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg mt-4 text-lg">
