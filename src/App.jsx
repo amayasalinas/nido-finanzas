@@ -1094,9 +1094,29 @@ const MemberEditModal = ({ isOpen, onClose, member, onSave, onDelete }) => {
 export default function FamilyFinanceApp() {
   const [currentView, setCurrentView] = useState('auth');
   const [user, setUser] = useState(null);
-  const [members, setMembers] = useState(INITIAL_MEMBERS);
-  const [expenses, setExpenses] = useState(INITIAL_EXPENSES);
-  const [settings, setSettings] = useState({ country: 'CO' });
+
+  // --- PERSISTENCIA LOCAL (STORAGE) ---
+  const [members, setMembers] = useState(() => {
+    const saved = localStorage.getItem('nido_members');
+    return saved ? JSON.parse(saved) : []; // Inicia vacío para nuevos usuarios
+  });
+
+  const [expenses, setExpenses] = useState(() => {
+    const saved = localStorage.getItem('nido_expenses');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem('nido_settings');
+    return saved ? JSON.parse(saved) : { country: 'CO' };
+  });
+
+  // Guardar cambios automáticamente
+  useEffect(() => { localStorage.setItem('nido_members', JSON.stringify(members)); }, [members]);
+  useEffect(() => { localStorage.setItem('nido_expenses', JSON.stringify(expenses)); }, [expenses]);
+  useEffect(() => { localStorage.setItem('nido_settings', JSON.stringify(settings)); }, [settings]);
+
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newExpense, setNewExpense] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: 1, isRecurring: false, isAutoDebit: false });
   const [editingMember, setEditingMember] = useState(null);
@@ -1113,13 +1133,19 @@ export default function FamilyFinanceApp() {
 
   // --- HANDLERS ---
   const handleLoginSuccess = () => {
-    setUser(members[0]); // Mock login as first user
+    if (members.length === 0) {
+      alert("No hay usuarios registrados. Por favor crea una cuenta nueva.");
+      return;
+    }
+    // Si hay usuarios, loguear al primero (simulación) o permitir elegir
+    // Para esta versión, tomamos el primero si existe.
+    setUser(members[0]);
     setCurrentView('dashboard');
   };
 
   const handleRegisterSuccess = (formData) => {
     const newMember = { id: Date.now(), name: formData.name, email: formData.email, role: 'admin', incomes: [], avatar: '😊', cards: [], loans: [] };
-    setMembers([...members, newMember]);
+    setMembers(prev => [...prev, newMember]);
     setUser(newMember);
     setSettings(prev => ({ ...prev, country: formData.country.code }));
     setCurrentView('onboarding');
