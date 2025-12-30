@@ -3,6 +3,7 @@
 -- =============================================
 
 -- 1. CREAR TABLA DE FAMILIAS
+-- 1. CREAR TABLA DE FAMILIAS
 create table if not exists public.families (
   id uuid default gen_random_uuid() primary key,
   name text not null,
@@ -12,21 +13,23 @@ create table if not exists public.families (
 -- Habilitar RLS en families
 alter table public.families enable row level security;
 
--- Política: Un usuario puede ver su propia familia
-create policy "Usuarios pueden ver su propia familia" on public.families
-  for select using (
-    id in (select family_id from public.profiles where id = auth.uid())
-  );
-
 -- 2. ACTUALIZAR PROFILES (Relación con Familia)
+-- Primero creamos la columna para que exista antes de usarla en políticas
 alter table public.profiles 
 add column if not exists family_id uuid references public.families(id),
 add column if not exists phone text,
 add column if not exists country text,
 add column if not exists currency text default 'COP';
 
+-- Ahora sí, Política: Un usuario puede ver su propia familia
+create policy "Usuarios pueden ver su propia familia" on public.families
+  for select using (
+    id in (select family_id from public.profiles where id = auth.uid())
+  );
+
 -- Política actualizada de Profiles (Ver a todos los miembros de mi familia)
 drop policy if exists "Users can insert their own profile" on public.profiles;
+
 -- Re-crear políticas más robustas
 create policy "Ver perfil propio y de familia" on public.profiles
   for select using (

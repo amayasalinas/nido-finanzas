@@ -58,3 +58,6 @@ typings/
 # Supabase
 supabase/
 db_schema.sql
+
+# Duplicate project folder
+family-finance-app/
