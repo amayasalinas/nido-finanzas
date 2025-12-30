@@ -596,8 +596,31 @@ const IncomeView = ({ members, currency, isAdding, onClose }) => {
 };
 
 const DebtsView = ({ members, currency }) => {
-  const allCards = members.flatMap(m => m.cards?.map(c => ({ ...c, owner: m.name })) || []);
+  const allCards = members.flatMap(m => m.cards?.map(c => ({ ...c, owner: m.name, ownerId: m.id })) || []);
   const allLoans = members.flatMap(m => m.loans?.map(l => ({ ...l, owner: m.name })) || []);
+  const [payModal, setPayModal] = useState({ open: false, card: null, amount: '' });
+
+  const handlePayCard = async () => {
+    if (!payModal.amount || !payModal.card) return;
+
+    // RF-11: Acción Masiva - Crear gasto vinculado a tarjeta
+    const { error } = await supabase.from('expenses').insert({
+      title: `Pago Tarjeta ${payModal.card.name}`,
+      amount: parseFloat(payModal.amount),
+      category: 'deudas',
+      due_date: new Date().toISOString().split('T')[0], // Hoy
+      responsible_id: payModal.card.ownerId,
+      status: 'paid', // Asumimos pago inmediato si es manual
+      is_recurring: false
+    });
+
+    if (error) alert("Error registrando pago: " + error.message);
+    else {
+      alert("Pago registrado exitosamente como gasto.");
+      setPayModal({ open: false, card: null, amount: '' });
+      // Idealmente recargar datos aquí
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
@@ -613,16 +636,20 @@ const DebtsView = ({ members, currency }) => {
       <div className="grid gap-3">
         {allCards.length === 0 && <p className="text-gray-400 text-sm">No hay tarjetas registradas.</p>}
         {allCards.map(c => (
-          <div key={c.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-indigo-500">
+          <div key={c.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-indigo-500 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => setPayModal({ open: true, card: c, amount: '' })} className="bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full hover:bg-indigo-200">Pagar</button>
+            </div>
             <div className="flex justify-between items-start mb-2">
               <div>
                 <span className="font-bold text-lg block">{c.name}</span>
-                <span className="text-xs text-gray-400">**** **** **** {c.last4}</span>
+                <span className="text-xs text-gray-400">{c.franchise || 'Visa'} • **** {c.last4}</span>
               </div>
               <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">{c.owner}</span>
             </div>
             <div className="flex justify-between text-sm text-gray-500 mt-2 border-t pt-2">
-              <span>Corte: Día {c.cutoffDate}</span>
+              <span>Corte: Día {c.cutoff_day || c.cutoffDate || 'N/A'}</span>
+              <span className="text-indigo-600 font-bold cursor-pointer" onClick={() => setPayModal({ open: true, card: c, amount: '' })}>Registrar Pago</span>
             </div>
           </div>
         ))}
@@ -634,16 +661,33 @@ const DebtsView = ({ members, currency }) => {
         {allLoans.map(l => (
           <div key={l.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
             <div className="flex justify-between items-center mb-1">
-              <span className="font-bold text-gray-900">{l.name}</span>
-              <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded text-sm">- {currency} {formatCurrencyInput(l.monthlyPayment)} /mes</span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-500 uppercase text-xs font-bold">Saldo Total</span>
-              <span className="font-bold text-red-900">{currency} {formatCurrencyInput(l.totalValue)}</span>
+              <div>
+                <span className="font-bold text-gray-900 block">{l.entity || 'Banco'} - {l.name}</span>
+                <span className="text-xs text-gray-400">{l.loan_type || 'Crédito'} • {l.interest_rate}% {l.rate_type}</span>
+              </div>
+              <div className="text-right">
+                <span className="block font-bold text-red-900">{currency} {formatCurrencyInput(l.totalValue)}</span>
+                <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Cuota: {currency} {formatCurrencyInput(l.monthlyPayment)}</span>
+              </div>
             </div>
           </div>
         ))}
       </div>
+
+      {payModal.open && (
+        <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm animate-slide-up">
+            <h3 className="font-bold text-lg mb-2">Registrar Pago de Tarjeta</h3>
+            <p className="text-sm text-gray-500 mb-4">Estás pagando la tarjeta <strong>{payModal.card.name}</strong> de {payModal.card.owner}.</p>
+            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Monto a Pagar</label>
+            <input type="number" autoFocus className="w-full border p-3 rounded-xl mb-4 font-bold text-lg" placeholder="0.00" value={payModal.amount} onChange={e => setPayModal({ ...payModal, amount: e.target.value })} />
+            <div className="flex gap-3">
+              <button onClick={() => setPayModal({ open: false, card: null, amount: '' })} className="flex-1 py-3 text-gray-500 font-bold">Cancelar</button>
+              <button onClick={handlePayCard} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700">Pagar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
