@@ -472,12 +472,35 @@ const DashboardView = ({ totalIncome, totalExpenses, categoryStats, expenses, me
   const [advice, setAdvice] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const pendingAmount = expenses.filter(e => e.status !== 'paid').reduce((acc, e) => acc + e.amount, 0);
-  const paymentProgress = totalExpenses > 0 ? ((totalExpenses - pendingAmount) / totalExpenses) * 100 : 0;
+  // RF-04: Calculate "Por Pagar" (Only current month)
+  const currentMonthExp = expenses.filter(e => {
+    const today = new Date();
+    const expDate = new Date(e.dueDate);
+    return expDate.getMonth() === today.getMonth() && expDate.getFullYear() === today.getFullYear();
+  });
+
+  const pendingAmount = currentMonthExp.filter(e => e.status !== 'paid').reduce((acc, e) => acc + e.amount, 0);
+  const totalMonthExpenses = currentMonthExp.reduce((acc, e) => acc + e.amount, 0);
+  const paymentProgress = totalMonthExpenses > 0 ? ((totalMonthExpenses - pendingAmount) / totalMonthExpenses) * 100 : 0;
+
+  // RF-05: Health Indicator
+  const healthRatio = totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 100;
+  const healthColor = healthRatio < 40 ? 'bg-emerald-500' : healthRatio < 70 ? 'bg-yellow-500' : 'bg-red-500';
+  const healthText = healthRatio < 40 ? 'Saludable 🤩' : healthRatio < 70 ? 'Cuidado 😐' : 'Crítico 🚨';
 
   const handleGenerateAdvice = async () => {
     setLoading(true);
-    const result = await callGeminiAPI(`Analiza: Ingresos ${totalIncome}, Gastos ${totalExpenses}. Dame 1 consejo corto.`);
+    // RF-06: Enhanced Context for Gemini
+    const debtTotal = members.reduce((acc, m) => acc + (m.loans?.reduce((s, l) => s + l.totalValue, 0) || 0), 0);
+    const prompt = `Actúa como asesor financiero experto. Datos del mes: 
+    - Ingresos: ${totalIncome}
+    - Gastos: ${totalExpenses}
+    - Deuda Total: ${debtTotal}
+    - Ratio Gasto/Ingreso: ${healthRatio.toFixed(1)}%
+    
+    Dame 1 consejo corto, accionable y motivador de máximo 20 palabras.`;
+
+    const result = await callGeminiAPI(prompt);
     setAdvice(result);
     setLoading(false);
   };
@@ -486,22 +509,37 @@ const DashboardView = ({ totalIncome, totalExpenses, categoryStats, expenses, me
     <div className="space-y-6 animate-fade-in pb-20">
       <div className="bg-gradient-to-br from-emerald-800 to-emerald-950 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
         <div className="flex justify-between items-start">
-          <div><p className="text-emerald-200 text-sm">Por Pagar</p><h1 className="text-4xl font-extrabold flex items-baseline"><span className="text-2xl mr-1">{currency}</span>{formatCurrencyInput(pendingAmount)}</h1></div>
+          <div><p className="text-emerald-200 text-sm">Por Pagar (Este Mes)</p><h1 className="text-4xl font-extrabold flex items-baseline"><span className="text-2xl mr-1">{currency}</span>{formatCurrencyInput(pendingAmount)}</h1></div>
           <button onClick={onOpenUpdateModal} className="bg-emerald-600/50 hover:bg-emerald-600 text-white p-2.5 rounded-xl"><ListChecks className="w-5 h-5" /></button>
         </div>
-        <div className="mt-6"><div className="flex justify-between text-xs text-emerald-200 mb-1"><span>Progreso</span><span>{Math.round(paymentProgress)}%</span></div><div className="w-full bg-emerald-900/50 rounded-full h-3"><div className="h-full bg-emerald-400 rounded-full" style={{ width: `${paymentProgress}%` }}></div></div></div>
+        <div className="mt-6"><div className="flex justify-between text-xs text-emerald-200 mb-1"><span>Progreso Pagos</span><span>{Math.round(paymentProgress)}%</span></div><div className="w-full bg-emerald-900/50 rounded-full h-3"><div className="h-full bg-emerald-400 rounded-full" style={{ width: `${paymentProgress}%` }}></div></div></div>
       </div>
+
+      {/* RF-05: Health Card */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-gray-500 font-bold uppercase">Estado Financiero</p>
+          <h3 className="text-lg font-bold text-gray-900">{healthText}</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-gray-600">{healthRatio.toFixed(0)}% Gastado</span>
+          <div className={`w-4 h-4 rounded-full ${healthColor} animate-pulse`}></div>
+        </div>
+      </div>
+
       <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 shadow-sm flex items-start gap-4">
         <div className="bg-indigo-600 p-2 rounded-full"><Sparkles className="w-5 h-5 text-white" /></div>
-        <div className="flex-1"><h3 className="text-indigo-900 font-bold text-sm">Asesor IA</h3><p className="text-indigo-700 text-sm mt-1">{advice || "Obtén consejos inteligentes."}</p>{!advice && <button onClick={handleGenerateAdvice} className="mt-2 text-xs font-bold text-indigo-600 bg-white px-3 py-1.5 rounded border border-indigo-200 shadow-sm">{loading ? 'Analizando...' : 'Analizar'}</button>}</div>
+        <div className="flex-1"><h3 className="text-indigo-900 font-bold text-sm">Asesor IA</h3><p className="text-indigo-700 text-sm mt-1">{advice || "Obtén consejos inteligentes basados en tu deuda y gastos."}</p>{!advice && <button onClick={handleGenerateAdvice} className="mt-2 text-xs font-bold text-indigo-600 bg-white px-3 py-1.5 rounded border border-indigo-200 shadow-sm">{loading ? 'Analizando...' : 'Analizar'}</button>}</div>
       </div>
       <div className="space-y-3">
-        {expenses.slice(0, 3).map(e => (
+        <h3 className="font-bold text-gray-700">Próximos Vencimientos</h3>
+        {currentMonthExp.slice(0, 3).map(e => (
           <div key={e.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
             <div><p className="font-bold text-gray-800">{e.title}</p><p className="text-xs text-gray-500">{formatDate(e.dueDate)}</p></div>
             <div className="text-right"><p className="font-bold">{currency} {formatCurrencyInput(e.amount)}</p><span className={`text-[10px] px-2 py-0.5 rounded-full ${e.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{e.status === 'paid' ? 'Pagado' : 'Pendiente'}</span></div>
           </div>
         ))}
+        {currentMonthExp.length === 0 && <p className="text-gray-400 text-sm italic">No hay gastos para este mes.</p>}
       </div>
     </div>
   );
@@ -693,25 +731,37 @@ const DebtsView = ({ members, currency }) => {
 };
 
 const FamilyView = ({ members }) => {
+  const handleInvite = () => {
+    // RF-13: Simulación de invitación por link (MVP)
+    const dummyLink = "https://nido-finance.vercel.app/join/familia-xyz";
+    navigator.clipboard.writeText(dummyLink);
+    alert("Enlace de invitación copiado al portapapeles (Simulado)");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-20">
       <h2 className="text-2xl font-bold">Mi Familia</h2>
       <div className="grid gap-4">
         {members.map(m => (
-          <div key={m.id} className="bg-white p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div key={m.id} className="bg-white p-5 rounded-2xl shadow-sm flex items-center gap-4 border border-gray-100">
             <div className="text-4xl bg-gray-50 p-3 rounded-full">{m.avatar}</div>
             <div className="flex-1">
               <h3 className="font-bold text-lg text-gray-900">{m.name}</h3>
               <p className="text-sm text-gray-500 capitalize">{m.role}</p>
             </div>
+            {m.role === 'admin' && <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-bold">Admin</span>}
           </div>
         ))}
       </div>
-      <div className="bg-indigo-50 p-6 rounded-2xl text-center">
-        <Users className="w-12 h-12 text-indigo-400 mx-auto mb-3" />
-        <h3 className="font-bold text-indigo-900">Invitar Miembro</h3>
-        <p className="text-sm text-indigo-700 mb-4">Envía una invitación para que se unan a tu Nido.</p>
-        <button className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition" onClick={() => alert("Función de invitación próximamente")}>Invitar</button>
+      <div className="bg-indigo-50 p-6 rounded-2xl text-center border border-indigo-100">
+        <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+          <Users className="w-8 h-8 text-indigo-600" />
+        </div>
+        <h3 className="font-bold text-indigo-900 text-lg">Invitar Miembro</h3>
+        <p className="text-sm text-indigo-700 mb-6 max-w-xs mx-auto">Comparte este enlace con tu pareja o familiares para que se unan a tu Nido.</p>
+        <button className="w-full bg-indigo-600 text-white px-6 py-4 rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2" onClick={handleInvite}>
+          <ExternalLink className="w-5 h-5" /> Copiar Enlace de Invitación
+        </button>
       </div>
     </div>
   );
