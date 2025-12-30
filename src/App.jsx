@@ -547,7 +547,7 @@ const AuthScreen = ({ onLogin, onRegister }) => {
       password: formData.password,
       options: {
         data: {
-          full_name: formData.name,
+          name: formData.name,
           phone: formData.phone,
           country: formData.country.code
         }
