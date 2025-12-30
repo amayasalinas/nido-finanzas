@@ -523,6 +523,112 @@ const IncomeView = ({ members, updateMembers, currency, isAdding, onClose }) => 
   return (<div className="space-y-6 animate-fade-in pb-20"><h2 className="text-2xl font-bold">Ingresos</h2><div className="grid gap-4">{members.map(m => (<div key={m.id} className="bg-white p-4 rounded-xl shadow-sm"><div className="font-bold mb-2 flex items-center gap-2">{m.avatar} {m.name}</div><div className="space-y-2">{m.incomes?.map(i => (<div key={i.id} className="flex justify-between text-sm"><span>{i.source}</span><span className="font-bold">{currency} {formatCurrencyInput(i.amount)}</span></div>))}</div></div>))}</div>{isAdding && <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4"><div className="bg-white w-full max-w-md rounded-2xl p-6"><h3 className="font-bold mb-4">Nuevo Ingreso</h3><select className="w-full border p-2 mb-2 rounded" onChange={e => setNewSource({ ...newSource, memberId: e.target.value })}><option value="">Miembro</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select><input type="text" className="w-full border p-2 mb-2 rounded" placeholder="Fuente" onChange={e => setNewSource({ ...newSource, source: e.target.value })} /><input type="text" className="w-full border p-2 mb-4 rounded" placeholder="Monto" onChange={e => setNewSource({ ...newSource, amount: e.target.value })} /><button onClick={handleAdd} className="w-full bg-emerald-900 text-white py-2 rounded">Guardar</button><button onClick={onClose} className="w-full mt-2 text-gray-500">Cancelar</button></div></div>}</div>);
 };
 
+const DebtsView = ({ members, currency }) => {
+  const allCards = members.flatMap(m => m.cards?.map(c => ({ ...c, owner: m.name })) || []);
+  const allLoans = members.flatMap(m => m.loans?.map(l => ({ ...l, owner: m.name })) || []);
+
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <h2 className="text-2xl font-bold">Deudas</h2>
+
+      <div className="bg-red-50 p-4 rounded-2xl border border-red-100 mb-6">
+        <h3 className="font-bold text-red-800 text-lg mb-2">Resumen de Deuda</h3>
+        <p className="text-3xl font-bold text-red-900">{currency} {formatCurrencyInput(allLoans.reduce((sum, l) => sum + l.totalValue, 0))}</p>
+        <p className="text-sm text-red-600">Total en préstamos pendientes</p>
+      </div>
+
+      <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2"><CreditCard className="w-5 h-5" /> Tarjetas de Crédito</h3>
+      <div className="grid gap-3">
+        {allCards.length === 0 && <p className="text-gray-400 text-sm">No hay tarjetas registradas.</p>}
+        {allCards.map(c => (
+          <div key={c.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-indigo-500">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <span className="font-bold text-lg block">{c.name}</span>
+                <span className="text-xs text-gray-400">**** **** **** {c.last4}</span>
+              </div>
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">{c.owner}</span>
+            </div>
+            <div className="flex justify-between text-sm text-gray-500 mt-2 border-t pt-2">
+              <span>Corte: Día {c.cutoffDate}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="text-lg font-bold text-gray-700 mt-6 flex items-center gap-2"><Landmark className="w-5 h-5" /> Préstamos</h3>
+      <div className="grid gap-3">
+        {allLoans.length === 0 && <p className="text-gray-400 text-sm">No hay préstamos registrados.</p>}
+        {allLoans.map(l => (
+          <div key={l.id} className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
+            <div className="flex justify-between items-center mb-1">
+              <span className="font-bold text-gray-900">{l.name}</span>
+              <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded text-sm">- {currency} {formatCurrencyInput(l.monthlyPayment)} /mes</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500 uppercase text-xs font-bold">Saldo Total</span>
+              <span className="font-bold text-red-900">{currency} {formatCurrencyInput(l.totalValue)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const FamilyView = ({ members }) => {
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <h2 className="text-2xl font-bold">Mi Familia</h2>
+      <div className="grid gap-4">
+        {members.map(m => (
+          <div key={m.id} className="bg-white p-5 rounded-2xl shadow-sm flex items-center gap-4">
+            <div className="text-4xl bg-gray-50 p-3 rounded-full">{m.avatar}</div>
+            <div className="flex-1">
+              <h3 className="font-bold text-lg text-gray-900">{m.name}</h3>
+              <p className="text-sm text-gray-500 capitalize">{m.role}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-indigo-50 p-6 rounded-2xl text-center">
+        <Users className="w-12 h-12 text-indigo-400 mx-auto mb-3" />
+        <h3 className="font-bold text-indigo-900">Invitar Miembro</h3>
+        <p className="text-sm text-indigo-700 mb-4">Envía una invitación para que se unan a tu Nido.</p>
+        <button className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition" onClick={() => alert("Función de invitación próximamente")}>Invitar</button>
+      </div>
+    </div>
+  );
+};
+
+const SettingsView = ({ currency }) => {
+  return (
+    <div className="space-y-6 animate-fade-in pb-20">
+      <h2 className="text-2xl font-bold">Configuración</h2>
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-gray-100 p-2 rounded-lg"><Globe className="w-5 h-5 text-gray-600" /></div>
+            <span className="font-bold text-gray-700">Moneda Principal</span>
+          </div>
+          <span className="font-mono text-gray-400 font-bold">{currency}</span>
+        </div>
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-gray-100 p-2 rounded-lg"><Bell className="w-5 h-5 text-gray-600" /></div>
+            <span className="font-bold text-gray-700">Notificaciones</span>
+          </div>
+          <div className="w-10 h-6 bg-emerald-500 rounded-full relative cursor-pointer"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div></div>
+        </div>
+        <button onClick={() => supabase.auth.signOut()} className="w-full p-4 flex items-center text-red-600 hover:bg-red-50 transition font-bold">
+          <LogOut className="w-5 h-5 mr-3" /> Cerrar Sesión
+        </button>
+      </div>
+      <p className="text-center text-gray-400 text-xs mt-8">Nido App v1.0.2 Beta</p>
+    </div>
+  );
+};
+
 // --- COMPONENTE PRINCIPAL ---
 export default function FamilyFinanceApp() {
   const [currentView, setCurrentView] = useState('loader');
@@ -627,6 +733,9 @@ export default function FamilyFinanceApp() {
               <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={Home} label="Inicio" variant="sidebar" />
               <NavButton active={activeTab === 'income'} onClick={() => setActiveTab('income')} icon={TrendingUp} label="Ingresos" variant="sidebar" />
               <NavButton active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} icon={DollarSign} label="Gastos" variant="sidebar" />
+              <NavButton active={activeTab === 'debts'} onClick={() => setActiveTab('debts')} icon={Landmark} label="Deudas" variant="sidebar" />
+              <NavButton active={activeTab === 'family'} onClick={() => setActiveTab('family')} icon={Users} label="Familia" variant="sidebar" />
+              <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={Settings} label="Ajustes" variant="sidebar" />
             </nav>
             <div className="p-4"><button onClick={() => supabase.auth.signOut()} className="flex items-center text-red-600"><LogOut className="w-4 h-4 mr-2" /> Salir</button></div>
           </aside>
@@ -640,12 +749,18 @@ export default function FamilyFinanceApp() {
                 <div className="grid gap-3">{expenses.map(e => <div key={e.id} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex justify-between"><span>{e.title}</span><span className="font-bold">${formatCurrencyInput(e.amount)}</span></div>)}</div>
               </div>
             )}
+            {activeTab === 'debts' && <DebtsView members={members} currency="$" />}
+            {activeTab === 'family' && <FamilyView members={members} />}
+            {activeTab === 'settings' && <SettingsView currency="$" />}
           </main>
 
           <nav className="md:hidden bg-white border-t border-gray-200 h-20 px-2 flex justify-between items-center absolute bottom-0 w-full z-10">
             <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={Home} label="Inicio" />
             <NavButton active={activeTab === 'income'} onClick={() => setActiveTab('income')} icon={TrendingUp} label="Ingresos" />
             <NavButton active={activeTab === 'expenses'} onClick={() => setActiveTab('expenses')} icon={DollarSign} label="Gastos" />
+            <NavButton active={activeTab === 'debts'} onClick={() => setActiveTab('debts')} icon={Landmark} label="Deudas" />
+            <NavButton active={activeTab === 'family'} onClick={() => setActiveTab('family')} icon={Users} label="Familia" />
+            <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={Settings} label="Ajustes" />
           </nav>
 
           {isAddModalOpen && (
