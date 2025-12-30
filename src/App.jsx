@@ -373,9 +373,20 @@ const AuthScreen = ({ onLogin, onRegister }) => {
   const [authView, setAuthView] = useState('landing');
   const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '', phone: '', country: COUNTRIES[0] });
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const getPasswordStrength = () => {
+    const l = formData.password.length;
+    if (l === 0) return 0;
+    if (l < 8) return 1;
+    if (l < 12) return 2;
+    return 3;
+  };
+  const strength = getPasswordStrength();
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
+    if (formData.password.length < 6) return alert("La contraseña debe tener al menos 6 caracteres");
     if (formData.password !== formData.confirmPassword) return alert("Las contraseñas no coinciden");
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
@@ -389,9 +400,18 @@ const AuthScreen = ({ onLogin, onRegister }) => {
         }
       }
     });
+
     setLoading(false);
-    if (error) alert(error.message);
-    else onRegister(formData);
+    if (error) {
+      alert("Error al crear cuenta: " + error.message);
+    } else if (data && !data.session) {
+      // Caso: Usuario creado pero requiere confirmación de email
+      alert("¡Cuenta creada! Revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.");
+      setAuthView('login');
+    } else {
+      // Caso: Usuario creado y logueado (si email confirm está desactivado)
+      onRegister(formData);
+    }
   };
 
   const handleLoginSubmit = async (e) => {
@@ -402,12 +422,46 @@ const AuthScreen = ({ onLogin, onRegister }) => {
       password: formData.password,
     });
     setLoading(false);
-    if (error) alert(error.message);
+    if (error) alert("Error de inicio de sesión: " + error.message);
     else onLogin();
   };
 
   if (authView === 'landing') return (<div className="bg-emerald-50 min-h-screen flex flex-col items-center justify-center p-6 w-full animate-fade-in relative"><div className="flex-1 flex flex-col items-center justify-center"><div className="w-24 h-24 bg-emerald-600 rounded-3xl flex items-center justify-center text-white shadow-2xl rotate-3 mb-8"><Feather className="w-12 h-12" /></div><h1 className="text-4xl font-bold text-emerald-900 mb-2 tracking-tight">Nido</h1><p className="text-emerald-700/80 text-lg text-center max-w-xs">Organiza, planifica y crece junto a tu familia.</p></div><div className="w-full max-w-md space-y-4 pb-10"><button onClick={() => setAuthView('register')} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-xl transform hover:scale-[1.02] active:scale-95">Crear Cuenta Nueva</button><button onClick={() => setAuthView('login')} className="w-full bg-white text-emerald-900 py-4 rounded-xl font-bold text-lg hover:bg-gray-50 transition shadow-sm border border-emerald-100">Ya tengo una cuenta</button></div></div>);
-  if (authView === 'register') return (<div className="bg-white min-h-screen flex flex-col p-6 w-full animate-slide-up overflow-y-auto"><div className="max-w-md mx-auto w-full"><div className="mb-4 pt-4"><button onClick={() => setAuthView('landing')} className="text-gray-400 hover:text-gray-900 transition flex items-center"><ArrowLeft className="w-6 h-6 mr-1" /> Atrás</button></div><h2 className="text-3xl font-bold text-gray-900 mb-2">Crea tu cuenta</h2><form onSubmit={handleRegisterSubmit} className="space-y-4"><div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Nombre</label><input type="text" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Ej. Papá Oso" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div><div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Email</label><input type="email" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="tu@email.com" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div><div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Contraseña</label><input type="password" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="********" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} /></div><div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Confirmar</label><input type="password" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3" placeholder="********" value={formData.confirmPassword} onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })} /></div><button type="submit" disabled={loading} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg mt-4">{loading ? 'Creando...' : 'Continuar'}</button></form></div></div>);
+
+  if (authView === 'register') return (
+    <div className="bg-white min-h-screen flex flex-col p-6 w-full animate-slide-up overflow-y-auto">
+      <div className="max-w-md mx-auto w-full">
+        <div className="mb-4 pt-4"><button onClick={() => setAuthView('landing')} className="text-gray-400 hover:text-gray-900 transition flex items-center"><ArrowLeft className="w-6 h-6 mr-1" /> Atrás</button></div>
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Crea tu cuenta</h2>
+        <form onSubmit={handleRegisterSubmit} className="space-y-4">
+          <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Nombre</label><input type="text" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Ej. Papá Oso" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} /></div>
+          <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Email</label><input type="email" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="tu@email.com" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Contraseña</label>
+            <div className="relative">
+              <input type={showPassword ? "text" : "password"} required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3 pr-10 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="********" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 focus:outline-none">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
+            </div>
+            {formData.password.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <div className="flex space-x-1 h-1">
+                  <div className={`flex-1 rounded-full transition-colors ${strength >= 1 ? 'bg-red-500' : 'bg-gray-200'}`} />
+                  <div className={`flex-1 rounded-full transition-colors ${strength >= 2 ? 'bg-yellow-500' : 'bg-gray-200'}`} />
+                  <div className={`flex-1 rounded-full transition-colors ${strength >= 3 ? 'bg-emerald-500' : 'bg-gray-200'}`} />
+                </div>
+                <p className="text-xs text-gray-400 text-right">{strength === 1 ? 'Débil' : strength === 2 ? 'Media' : 'Fuerte'}</p>
+              </div>
+            )}
+          </div>
+
+          <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Confirmar</label><input type="password" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3" placeholder="********" value={formData.confirmPassword} onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })} /></div>
+          <button type="submit" disabled={loading} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg mt-4">{loading ? 'Creando...' : 'Continuar'}</button>
+        </form>
+      </div>
+    </div>
+  );
+
   if (authView === 'login') return (<div className="bg-white min-h-screen flex flex-col p-6 w-full animate-slide-up"><div className="max-w-md mx-auto w-full"><div className="mb-6 pt-4"><button onClick={() => setAuthView('landing')} className="text-gray-400 hover:text-gray-900 transition flex items-center"><ArrowLeft className="w-6 h-6 mr-1" /> Atrás</button></div><h2 className="text-3xl font-bold text-gray-900 mb-2">Bienvenido</h2><form onSubmit={handleLoginSubmit} className="space-y-5"><div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Email</label><input type="email" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></div><div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Contraseña</label><input type="password" required className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-3" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} /></div><button type="submit" disabled={loading} className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg mt-4">{loading ? 'Iniciando...' : 'Iniciar Sesión'}</button></form></div></div>);
 };
 
