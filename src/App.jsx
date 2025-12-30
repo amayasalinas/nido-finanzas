@@ -393,6 +393,7 @@ const AuthScreen = ({ onLogin, onRegister }) => {
       email: formData.email,
       password: formData.password,
       options: {
+        emailRedirectTo: window.location.origin,
         data: {
           name: formData.name,
           phone: formData.phone,
