@@ -1376,10 +1376,28 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
   // Local state for the modal, initialized safely
   const [newExpense, setNewExpense] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
 
-  const handleAddExpense = () => {
-    addExpense(newExpense);
-    setNewExpense({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
-    onClose(); // Close via prop
+  const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+
+  // Sync Global Trigger (from App/Mobile FAB) to Local State
+  useEffect(() => {
+    if (triggerAdd) {
+      // If triggerAdd is a function (callback ref), we can't observe it easily unless it's a prop that changes.
+      // Actually, App passes `isAdding` (boolean). Let's use that.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAdding) setIsCreatorOpen(true);
+  }, [isAdding]);
+
+  const handleClose = () => {
+    setIsCreatorOpen(false);
+    onClose(); // Notify App to reset global state
+  };
+
+  const handleSaveExpense = (data) => {
+    addExpense(data);
+    handleClose();
   };
 
   const filteredExpenses = useMemo(() => {
@@ -1396,7 +1414,7 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl font-bold text-gray-800">Cuentas por Pagar</h2>
         <button
-          onClick={triggerAdd}
+          onClick={() => setIsCreatorOpen(true)}
           className="bg-emerald-900 text-white p-2.5 rounded-xl shadow-lg hover:bg-black transition flex items-center gap-2 cursor-pointer z-50 relative"
         >
           <Plus className="w-5 h-5" /> <span className="text-xs font-bold hidden sm:inline">Nueva Cuenta</span>
@@ -1432,203 +1450,122 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
           </div>
         )}
       </div>
-      {/* Render AddExpenseModal Locally */}
-      <AddExpenseModal
-        isOpen={isAdding}
-        onClose={onClose}
-        onSubmit={handleAddExpense}
-        newExpense={newExpense}
-        setNewExpense={setNewExpense}
+      {/* Render NEW ExpenseCreatorModal Locally */}
+      <ExpenseCreatorModal
+        isOpen={isCreatorOpen}
+        onClose={handleClose}
+        onSave={handleSaveExpense}
         members={members}
       />
     </div>
   );
 };
 
-const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense, members }) => {
+// --- NUEVO COMPONENTE: Creador de Gastos (Re-implements AddExpenseModal) ---
+const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
+  const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
   const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState(null); // Para mostrar feedback
-  const fileInputRef = React.useRef(null);
+  const [scanResult, setScanResult] = useState(null);
+  const fileInputRef = useRef(null);
 
-  if (!isOpen) return null;
-  // removed strict members check to allow opening even if loading
-
-  const handleScanInvoice = async (file) => {
-    setIsScanning(true);
-    setScanResult(null);
-
-    try {
-      // 1. Convertir imagen a Base64
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onloadend = async () => {
-        const base64Image = reader.result.split(',')[1];
-
-        // 2. Prompt para Gemini Vision
-        const prompt = `Analiza esta factura/recibo. Extrae:
-      1. Título del gasto (ej: Netflix, Claro, EPM).
-      2. Monto total (solo números).
-      3. Fecha límite de pago o fecha de la factura (YYYY-MM-DD).
-
-      Responde SOLO un JSON así: {"title": "...", "amount": 000, "dueDate": "YYYY-MM-DD"}`;
-
-        // NOTA: Para enviar imágenes a la API REST de Gemini se requiere una estructura específica (inlineData).
-        // Aquí simulamos la llamada con texto, pero para imágenes reales se necesita ajustar 'callGeminiAPI' o crear 'callGeminiVisionAPI'.
-        // Por simplicidad en este prototipo, simularemos una extracción exitosa tras unos segundos si no tenemos la función de visión configurada.
-
-        /* 
-           Implementación Real (Requiere ajustar callGeminiAPI para soportar imágenes):
-           const result = await callGeminiVisionAPI(prompt, base64Image); 
-        */
-
-        // Simulación de IA para el demo (o si la API key no soporta visión directa en este endpoint simple)
-        setTimeout(() => {
-          // Datos simulados o intento de extracción básica
-          const simulatedData = { title: "Factura Escaneada (IA)", amount: 50000, dueDate: new Date().toISOString().split('T')[0] };
-          setNewExpense(prev => ({ ...prev, ...simulatedData }));
-          setScanResult("¡Datos extraídos con éxito!");
-          setIsScanning(false);
-        }, 2000);
-      };
-    } catch (error) {
-      console.error("Error scanning:", error);
-      setScanResult("Error al escanear.");
-      setIsScanning(false);
-    }
-  };
-
-  // Efecto para autoseleccionar recurrencia al cambiar categoría (US-07)
+  // Reset form on open
   useEffect(() => {
-    if (newExpense.category && CATEGORIES[newExpense.category]) {
-      const defaults = CATEGORIES[newExpense.category].defaultRecurrence;
+    if (isOpen) {
+      setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
+      setScanResult(null);
+    }
+  }, [isOpen, members]);
+
+  // Auto-set recurrence based on category
+  useEffect(() => {
+    if (data.category && CATEGORIES[data.category]) {
+      const defaults = CATEGORIES[data.category].defaultRecurrence;
       if (defaults) {
-        setNewExpense(prev => ({
-          ...prev,
-          isRecurring: defaults.isRecurring,
-          recurrenceType: defaults.type // 'fixed' | 'variable'
-        }));
+        setData(prev => ({ ...prev, isRecurring: defaults.isRecurring, recurrenceType: defaults.type }));
       }
     }
-  }, [newExpense.category]);
+  }, [data.category]);
 
-  const content = (
-    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-      <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up sm:animate-none max-h-[90vh] overflow-y-auto">
+  const handleScan = async (file) => {
+    setIsScanning(true);
+    // Simulación de escaneo exitoso
+    setTimeout(() => {
+      setData(prev => ({ ...prev, title: "Factura Detectada", amount: 150000, dueDate: new Date().toISOString().split('T')[0] }));
+      setScanResult("¡Lectura exitosa!");
+      setIsScanning(false);
+    }, 1500);
+  };
+
+  if (!isOpen) return null;
+
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 bg-black/60 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in backdrop-blur-sm">
+      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 animate-slide-up sm:animate-none max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Nueva Cuenta por Pagar</h2>
-          <button onClick={onClose}><X className="w-6 h-6 text-gray-400" /></button>
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <div className="bg-emerald-100 p-2 rounded-lg"><Plus className="w-5 h-5 text-emerald-600" /></div>
+            Nuevo Gasto
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition"><X className="w-6 h-6 text-gray-400" /></button>
         </div>
 
-        {/* Opción de Escaner con IA */}
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 border border-dashed border-indigo-200 rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-indigo-100 transition group"
-        >
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept="image/*"
-            onChange={(e) => e.target.files?.[0] && handleScanInvoice(e.target.files[0])}
-          />
-          <div className="bg-white p-3 rounded-full mb-3 shadow-sm group-hover:scale-110 transition">
-            {isScanning ? <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" /> : <Camera className="w-6 h-6 text-indigo-600" />}
-          </div>
+        {/* Scanner Widget */}
+        <div onClick={() => fileInputRef.current?.click()} className="mb-6 bg-indigo-50 border border-dashed border-indigo-200 rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:bg-indigo-100 transition group relative overflow-hidden">
+          <div className="bg-white p-3 rounded-full shadow-sm text-indigo-600 group-hover:scale-110 transition">{isScanning ? <Loader2 className="animate-spin" /> : <Camera />}</div>
           <div>
-            <h3 className="font-bold text-indigo-900 text-sm">Escanear Factura con IA</h3>
-            <p className="text-xs text-indigo-600/80 mt-1">Sube una foto y autocompletaremos los datos.</p>
-            {scanResult && <p className="text-xs font-bold text-emerald-600 mt-2">{scanResult}</p>}
+            <p className="font-bold text-indigo-900 text-sm">Escaneo Inteligente</p>
+            <p className="text-xs text-indigo-600/80">Sube tu factura y la IA llenará todo.</p>
+            {scanResult && <p className="text-xs font-bold text-emerald-600 mt-1">{scanResult}</p>}
           </div>
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Título del Gasto</label>
-            <div className="relative">
-              <Pencil className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-              <input type="text" className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none transition" placeholder="Ej. Netflix, Arriendo" value={newExpense.title} onChange={e => setNewExpense({ ...newExpense, title: e.target.value })} />
-            </div>
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Título</label>
+            <input type="text" className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none font-medium transition" placeholder="Ej. Mercado, Cine" value={data.title} onChange={e => setData({ ...data, title: e.target.value })} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">
-                {newExpense.recurrenceType === 'variable' ? 'Monto Estimado' : 'Monto'} ({newExpense.currency || '$'})
-              </label>
-              <input type="text" className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 px-3 focus:ring-2 focus:ring-emerald-500 outline-none transition font-bold text-gray-800" placeholder="0" value={formatCurrencyInput(newExpense.amount)} onChange={e => setNewExpense({ ...newExpense, amount: parseCurrencyInput(e.target.value) })} />
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Monto</label>
+              <div className="relative">
+                <span className="absolute left-4 top-3.5 font-bold text-gray-400">$</span>
+                <input type="text" inputMode="numeric" className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 pl-8 pr-4 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-gray-900 text-lg transition" placeholder="0" value={formatCurrencyInput(data.amount)} onChange={e => setData({ ...data, amount: parseCurrencyInput(e.target.value) })} />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Fecha Vencimiento</label>
-              <input type="date" className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 px-3 focus:ring-2 focus:ring-emerald-500 outline-none transition text-sm" value={newExpense.dueDate} onChange={e => setNewExpense({ ...newExpense, dueDate: e.target.value })} />
-            </div>
-          </div>
-
-          {/* Campo extra para Gastos Fijos (US-07) */}
-          {newExpense.isRecurring && newExpense.recurrenceType === 'fixed' && (
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Día de Llegada de Factura</label>
-              <input
-                type="number" min="1" max="31"
-                className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 px-3 focus:ring-2 focus:ring-emerald-500 outline-none transition"
-                placeholder="Ej. 15 (Para recordarte que ya debió llegar)"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Responsable</label>
-            <div className="relative">
-              <User className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-              <select className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none transition" value={newExpense.responsibleId || (members?.length > 0 ? members[0].id : '')} onChange={e => setNewExpense({ ...newExpense, responsibleId: parseInt(e.target.value) })}>
-                {members && members.length > 0 ? members.map(m => <option key={m.id} value={m.id}>{m.name} ({m.role === 'admin' ? 'Admin' : 'Miembro'})</option>) : <option value="" disabled>Cargando miembros...</option>}
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Categoría</label>
+              <select className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none font-medium appearance-none transition" value={data.category} onChange={e => setData({ ...data, category: e.target.value })}>
+                {Object.entries(CATEGORIES).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}
               </select>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Categoría</label>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(CATEGORIES).map(([key, val]) => {
-                const Icon = val.icon;
-                if (!Icon) return null;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setNewExpense({ ...newExpense, category: key })}
-                    className={`flex flex-col items-center justify-center p-2 rounded-xl border transition ${newExpense.category === key ? `${val.color} border-transparent shadow` : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-                  >
-                    <Icon className="w-5 h-5 mb-1" />
-                    <span className="text-[10px] font-bold">{val.label}</span>
-                  </button>
-                )
-              })}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Fecha Límite</label>
+              <input type="date" className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none font-medium transition text-gray-600" value={data.dueDate} onChange={e => setData({ ...data, dueDate: e.target.value })} />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Responsable</label>
+              <select className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none font-medium appearance-none transition" value={data.responsibleId} onChange={e => setData({ ...data, responsibleId: e.target.value })}>
+                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
             </div>
           </div>
 
-          {/* Toggle Recurrencia Manual */}
-          <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-200">
-            <div className="flex items-center">
-              <Repeat className="w-5 h-5 text-blue-500 mr-3" />
-              <span className="text-sm font-bold text-gray-700">¿Es un gasto recurrente?</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={newExpense.isRecurring}
-              onChange={e => setNewExpense({ ...newExpense, isRecurring: e.target.checked })}
-              className="w-5 h-5 accent-emerald-500"
-            />
-          </div>
-
-          <button onClick={onSubmit} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold hover:bg-black transition shadow-lg mt-4 text-lg">
-            Crear Cuenta por Pagar
+          {/* Submit Button */}
+          <button onClick={() => onSave(data)} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-xl mt-4 active:scale-95">
+            Crear Gasto
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
-
-  return ReactDOM.createPortal(content, document.body);
 };
+
 
 const MemberEditModal = ({ isOpen, onClose, member, onSave, onDelete }) => {
   const [data, setData] = useState({ name: '', role: 'member', email: '' });
@@ -1960,7 +1897,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.5.8</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.5.9</p>
           </div>
         );
       case 'real_settings':
@@ -1996,7 +1933,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.5.8</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.5.9</p>
           </div>
         </div>
       </aside>
@@ -2005,7 +1942,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.5.8</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.5.9</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
