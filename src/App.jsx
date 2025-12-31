@@ -1941,6 +1941,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.5.0</p>
           </div>
         );
       case 'real_settings':
@@ -1985,7 +1986,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {user?.name?.split(' ')[0] || 'Usuario'} <span className="text-[10px] text-gray-400 font-normal ml-1 border px-1 rounded bg-gray-50">v1.2</span>
+            Hola, {user?.name?.split(' ')[0] || 'Usuario'} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.5.0</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
