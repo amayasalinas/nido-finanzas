@@ -977,21 +977,58 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
   const [newItem, setNewItem] = useState({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' });
   const [cardPaymentModal, setCardPaymentModal] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [editingItem, setEditingItem] = useState(null);
+
+  const handleEditItem = (memberId, item, type) => {
+    setNewItem({
+      ...item,
+      ownerId: memberId,
+      entityType: item.entityType || 'bank', // Fallback
+      // Ensure all fields are present for the form
+      last4: item.last4 || '',
+      cutoffDate: item.cutoffDate || '',
+      totalValue: item.totalValue || '',
+      monthlyPayment: item.monthlyPayment || '',
+      term: item.term || '',
+      rate: item.rate || '',
+      rateType: item.rateType || 'EA',
+      isAutoDebit: item.isAutoDebit || false,
+      disbursementDate: item.disbursementDate || '',
+      customName: item.customName || '',
+      entityName: item.entityName || '',
+      type: item.type || 'Libre inversión'
+    });
+    setEditingItem({ ...item, type }); // Store Original ID and type
+    onOpenAdd(); // Handle Open Add/Edit Modal
+  };
 
   const handleAddItem = (e) => {
     e.preventDefault();
     const updatedMembers = members.map(m => {
       if (m.id === parseInt(newItem.ownerId)) {
-        if (activeTab === 'cards') {
-          return { ...m, cards: [...(m.cards || []), { id: Date.now(), name: 'Tarjeta', last4: newItem.last4, cutoffDate: newItem.cutoffDate }] };
+        if (editingItem) {
+          // UPDATE LOGIC
+          if (activeTab === 'cards') {
+            // Check if we are moving ownership? Complex. Assume same owner for now or handle remove/add. 
+            // Simple Edit: Update in place.
+            return { ...m, cards: m.cards.map(c => c.id === editingItem.id ? { ...c, ...newItem, id: c.id } : c) };
+          } else {
+            return { ...m, loans: m.loans.map(l => l.id === editingItem.id ? { ...l, ...newItem, id: l.id } : l) };
+          }
         } else {
-          return { ...m, loans: [...(m.loans || []), { id: Date.now(), type: newItem.type, customName: newItem.customName, entityName: newItem.entityName, totalValue: parseFloat(newItem.totalValue), monthlyPayment: parseFloat(newItem.monthlyPayment), term: newItem.term, rate: newItem.rate, rateType: newItem.rateType, isAutoDebit: newItem.isAutoDebit, disbursementDate: newItem.disbursementDate }] };
+          // CREATE LOGIC
+          if (activeTab === 'cards') {
+            return { ...m, cards: [...(m.cards || []), { id: Date.now(), name: 'Tarjeta', last4: newItem.last4, cutoffDate: newItem.cutoffDate }] };
+          } else {
+            return { ...m, loans: [...(m.loans || []), { id: Date.now(), type: newItem.type, customName: newItem.customName, entityName: newItem.entityName, totalValue: parseFloat(newItem.totalValue), monthlyPayment: parseFloat(newItem.monthlyPayment), term: newItem.term, rate: newItem.rate, rateType: newItem.rateType, isAutoDebit: newItem.isAutoDebit, disbursementDate: newItem.disbursementDate }] };
+          }
         }
       }
       return m;
     });
     updateMembers(updatedMembers);
     onClose();
+    setEditingItem(null);
     setNewItem({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' });
   };
 
@@ -1041,8 +1078,11 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
               <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1">{member.name}</h3>
               <div className="space-y-3">
                 {items.map(item => (
-                  <div key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm relative">
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(member.id, item.id, activeTab === 'cards' ? 'card' : 'loan'); }} className="absolute top-2 right-2 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  <div key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm relative group">
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button onClick={(e) => { e.stopPropagation(); handleEditItem(member.id, item, activeTab === 'cards' ? 'card' : 'loan'); }} className="text-gray-300 hover:text-blue-500 p-1"><Pencil className="w-4 h-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(member.id, item.id, activeTab === 'cards' ? 'card' : 'loan'); }} className="text-gray-300 hover:text-red-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                    </div>
                     {activeTab === 'cards' ? (
                       <div>
                         <div className="flex items-center mb-3">
@@ -1085,7 +1125,7 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
       {isAdding && ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4 animate-fade-in">
           <div className="bg-white w-full max-w-md rounded-2xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg">Agregar {activeTab === 'cards' ? 'Tarjeta' : 'Préstamo'}</h3><button onClick={onClose}><X className="w-6 h-6 text-gray-400" /></button></div>
+            <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg">{editingItem ? 'Editar' : 'Agregar'} {activeTab === 'cards' ? 'Tarjeta' : 'Préstamo'}</h3><button onClick={() => { onClose(); setEditingItem(null); }}><X className="w-6 h-6 text-gray-400" /></button></div>
             <form onSubmit={handleAddItem} className="space-y-4">
               <div><label className="block text-sm font-medium mb-1">Titular</label><select className="w-full border p-2 rounded-lg bg-white" value={newItem.ownerId} onChange={e => setNewItem({ ...newItem, ownerId: e.target.value })}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
               {activeTab === 'cards' ? (
@@ -1305,7 +1345,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
     </div>
   );
 };
-const ExpenseCard = ({ expense, members, toggleStatus, deleteExpense, currency, triggerConfirm }) => {
+const ExpenseCard = ({ expense, members, toggleStatus, deleteExpense, onEdit, currency, triggerConfirm }) => {
   const isPaid = expense.status === 'paid';
   const category = CATEGORIES[expense.category] || CATEGORIES.otros;
   const CategoryIcon = category?.icon || AlertCircle; // Safety fallback
@@ -1334,7 +1374,10 @@ const ExpenseCard = ({ expense, members, toggleStatus, deleteExpense, currency, 
               </div>
             </div>
           </div>
-          <button onClick={handleDelete} className="text-gray-300 hover:text-red-500 transition p-1"><X className="w-4 h-4" /></button>
+          <div className="flex gap-1">
+            <button onClick={(e) => { e.stopPropagation(); onEdit(expense); }} className="text-gray-300 hover:text-blue-500 transition p-1"><Pencil className="w-4 h-4" /></button>
+            <button onClick={handleDelete} className="text-gray-300 hover:text-red-500 transition p-1"><X className="w-4 h-4" /></button>
+          </div>
         </div>
 
         <div className="flex items-end justify-between mt-auto">
@@ -1371,12 +1414,13 @@ const ExpenseCard = ({ expense, members, toggleStatus, deleteExpense, currency, 
   );
 };
 
-const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency, categories, triggerConfirm, triggerAdd, addExpense, isAdding, onClose }) => {
+const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, editExpense, currency, categories, triggerConfirm, triggerAdd, addExpense, isAdding, onClose }) => {
   const [filter, setFilter] = useState('all');
   // Local state for the modal, initialized safely
   const [newExpense, setNewExpense] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
 
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
 
   // Sync Global Trigger (from App/Mobile FAB) to Local State
   useEffect(() => {
@@ -1387,16 +1431,29 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
   }, []);
 
   useEffect(() => {
-    if (isAdding) setIsCreatorOpen(true);
+    if (isAdding) {
+      setEditingExpense(null); // Ensure fresh create mode
+      setIsCreatorOpen(true);
+    }
   }, [isAdding]);
 
   const handleClose = () => {
     setIsCreatorOpen(false);
+    setEditingExpense(null);
     onClose(); // Notify App to reset global state
   };
 
+  const handleEdit = (expense) => {
+    setEditingExpense(expense);
+    setIsCreatorOpen(true);
+  };
+
   const handleSaveExpense = (data) => {
-    addExpense(data);
+    if (editingExpense) {
+      editExpense({ ...data, id: editingExpense.id });
+    } else {
+      addExpense(data);
+    }
     handleClose();
   };
 
@@ -1436,9 +1493,11 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
             members={members}
             toggleStatus={toggleStatus}
             deleteExpense={deleteExpense}
+            onEdit={handleEdit}
             currency={currency}
             triggerConfirm={triggerConfirm}
           />
+
         ))}
 
         {filteredExpenses.length === 0 && (
@@ -1456,35 +1515,43 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
         onClose={handleClose}
         onSave={handleSaveExpense}
         members={members}
+        initialData={editingExpense}
       />
     </div>
   );
 };
 
-// --- NUEVO COMPONENTE: Creador de Gastos (Re-implements AddExpenseModal) ---
-const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
+const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) => {
   const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '' });
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Reset form on open
+  // Reset/Populate form on open
   useEffect(() => {
     if (isOpen) {
-      setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '' });
+      if (initialData) {
+        setData({
+          ...initialData,
+          amount: initialData.amount || '', // Ensure defined
+          responsibleId: initialData.responsibleId || members[0]?.id // Fallback
+        });
+      } else {
+        setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '' });
+      }
       setScanResult(null);
     }
-  }, [isOpen, members]);
+  }, [isOpen, members, initialData]);
 
-  // Auto-set recurrence based on category
+  // Auto-set recurrence defaults only if NOT editing (to avoid overriding user customizations)
   useEffect(() => {
-    if (data.category && CATEGORIES[data.category]) {
+    if (!initialData && data.category && CATEGORIES[data.category]) {
       const defaults = CATEGORIES[data.category].defaultRecurrence;
       if (defaults) {
         setData(prev => ({ ...prev, isRecurring: defaults.isRecurring, recurrenceType: defaults.type }));
       }
     }
-  }, [data.category]);
+  }, [data.category, initialData]);
 
   const handleScan = async (file) => {
     setIsScanning(true);
@@ -1504,7 +1571,7 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <div className="bg-emerald-100 p-2 rounded-lg"><Plus className="w-5 h-5 text-emerald-600" /></div>
-            Nuevo Gasto
+            {initialData ? 'Editar Gasto' : 'Nuevo Gasto'}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition"><X className="w-6 h-6 text-gray-400" /></button>
         </div>
@@ -1624,7 +1691,7 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
 
           {/* Submit Button */}
           <button onClick={() => onSave(data)} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-xl mt-4 active:scale-95">
-            {data.isRecurring && data.recurrenceType === 'variable' && !data.amount ? 'Crear Gasto Variable' : 'Crear Gasto'}
+            {initialData ? 'Guardar Cambios' : (data.isRecurring && data.recurrenceType === 'variable' && !data.amount ? 'Crear Gasto Variable' : 'Crear Gasto')}
           </button>
         </div>
       </div>
@@ -1843,6 +1910,10 @@ export default function FamilyFinanceApp() {
     setIsAddModalOpen(false);
   };
 
+  const editExpense = (updatedExpense) => {
+    setExpenses(prev => prev.map(e => e.id === updatedExpense.id ? { ...e, ...updatedExpense } : e));
+  };
+
   const deleteExpense = (id) => {
     setExpenses(prev => prev.filter(e => e.id !== id));
   };
@@ -1908,7 +1979,9 @@ export default function FamilyFinanceApp() {
           expenses={expenses}
           members={members}
           toggleStatus={toggleStatus}
+
           deleteExpense={deleteExpense}
+          editExpense={editExpense}
           currency={activeCurrencySymbol}
           categories={CATEGORIES}
           triggerConfirm={triggerConfirm}
@@ -1964,7 +2037,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.6.0</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.6.1</p>
           </div>
         );
       case 'real_settings':
@@ -2000,7 +2073,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.6.0</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.6.1</p>
           </div>
         </div>
       </aside>
@@ -2009,7 +2082,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.6.0</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.6.1</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
