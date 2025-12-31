@@ -1371,13 +1371,10 @@ const ExpenseCard = ({ expense, members, toggleStatus, deleteExpense, currency, 
   );
 };
 
-const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency, categories, triggerConfirm, onOpenAddModal, addExpense, isAdding, onClose }) => {
+const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency, categories, triggerConfirm, triggerAdd, addExpense, isAdding, onClose }) => {
   const [filter, setFilter] = useState('all');
   // Local state for the modal, initialized safely
   const [newExpense, setNewExpense] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
-  // If we receive "isAdding" from parent, we use it to show modal.
-  // Actually, we can use local state if independent, but App controls routing.
-  // Let's rely on `isAdding` prop from App.
 
   const handleAddExpense = () => {
     addExpense(newExpense);
@@ -1399,7 +1396,7 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl font-bold text-gray-800">Cuentas por Pagar</h2>
         <button
-          onClick={onOpenAddModal}
+          onClick={triggerAdd}
           className="bg-emerald-900 text-white p-2.5 rounded-xl shadow-lg hover:bg-black transition flex items-center gap-2 cursor-pointer z-50 relative"
         >
           <Plus className="w-5 h-5" /> <span className="text-xs font-bold hidden sm:inline">Nueva Cuenta</span>
@@ -1515,7 +1512,7 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
   }, [newExpense.category]);
 
   const content = (
-    <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
       <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up sm:animate-none max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900">Nueva Cuenta por Pagar</h2>
@@ -1898,7 +1895,7 @@ export default function FamilyFinanceApp() {
           currency={activeCurrencySymbol}
           categories={CATEGORIES}
           triggerConfirm={triggerConfirm}
-          onOpenAddModal={() => setIsAddModalOpen(true)}
+          triggerAdd={() => setIsAddModalOpen(true)}
           addExpense={addExpense}
           isAdding={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
@@ -1950,7 +1947,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.5.5</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.5.6</p>
           </div>
         );
       case 'real_settings':
@@ -1986,7 +1983,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.5.5</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.5.6</p>
           </div>
         </div>
       </aside>
@@ -1995,7 +1992,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.5.5</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.5.6</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
