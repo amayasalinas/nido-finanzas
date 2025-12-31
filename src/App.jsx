@@ -1553,7 +1553,7 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Responsable</label>
             <div className="relative">
               <User className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-              <select className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none transition" value={newExpense.responsibleId || (members.length > 0 ? members[0].id : '')} onChange={e => setNewExpense({ ...newExpense, responsibleId: parseInt(e.target.value) })}>
+              <select className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none transition" value={newExpense.responsibleId || (members?.length > 0 ? members[0].id : '')} onChange={e => setNewExpense({ ...newExpense, responsibleId: parseInt(e.target.value) })}>
                 {members && members.length > 0 ? members.map(m => <option key={m.id} value={m.id}>{m.name} ({m.role === 'admin' ? 'Admin' : 'Miembro'})</option>) : <option value="" disabled>Cargando miembros...</option>}
               </select>
             </div>
@@ -1865,8 +1865,8 @@ export default function FamilyFinanceApp() {
           updateMembers={setMembers}
           currency={activeCurrencySymbol}
           triggerCurrencyModal={() => setShowCurrencySelect(true)}
-          isAdding={false} // Simplification for now
-          onClose={() => { }}
+          isAdding={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
           triggerConfirm={triggerConfirm}
         />;
       case 'debts':
@@ -1991,7 +1991,7 @@ export default function FamilyFinanceApp() {
 
       {/* Modals */}
       <AddExpenseModal
-        isOpen={isAddModalOpen && currentView !== 'debts'} // In debts view, we use custom modal logic inside existing view or distinct
+        isOpen={isAddModalOpen && currentView !== 'debts' && currentView !== 'incomes'} // Hide global modal when views handle their own
         onClose={() => setIsAddModalOpen(false)}
         onSubmit={() => addExpense(newExpense)}
         newExpense={newExpense}
