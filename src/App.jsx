@@ -788,7 +788,7 @@ const DashboardView = ({ totalIncome, totalExpenses, healthScore, categoryStats,
                 </div>
               </div>
             ))}
-            {categoryStats.length === 0 && (
+            {totalExpenses === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-center text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                 <div className="bg-emerald-100 p-3 rounded-full mb-3 text-emerald-600 animate-bounce">
                   <Plus className="w-6 h-6" />
@@ -1553,7 +1553,7 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Responsable</label>
             <div className="relative">
               <User className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-              <select className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none transition" value={newExpense.responsibleId} onChange={e => setNewExpense({ ...newExpense, responsibleId: parseInt(e.target.value) })}>
+              <select className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none transition" value={newExpense.responsibleId || ''} onChange={e => setNewExpense({ ...newExpense, responsibleId: parseInt(e.target.value) })}>
                 {members.map(m => <option key={m.id} value={m.id}>{m.name} ({m.role === 'admin' ? 'Admin' : 'Miembro'})</option>)}
               </select>
             </div>
@@ -1789,7 +1789,7 @@ export default function FamilyFinanceApp() {
   const addExpense = (expenseData) => {
     setExpenses(prev => [...prev, { ...expenseData, id: Date.now(), status: 'pending' }]);
     setIsAddModalOpen(false);
-    setNewExpense({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id, isRecurring: false, isAutoDebit: false });
+    setNewExpense({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
   };
 
   const deleteExpense = (id) => {
@@ -1951,7 +1951,7 @@ export default function FamilyFinanceApp() {
       {/* Mobile Header & Nav */}
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
-          <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">Hola, {user?.name?.split(' ')[0]}</h1>
+          <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">Hola, {user?.name?.split(' ')[0] || 'Usuario'}</h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
         <button onClick={() => setCurrentView('real_settings')} className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-lg border border-gray-200 shadow-sm active:scale-95 transition">
