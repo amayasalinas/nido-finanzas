@@ -788,7 +788,32 @@ const DashboardView = ({ totalIncome, totalExpenses, healthScore, categoryStats,
                 </div>
               </div>
             ))}
-            {categoryStats.length === 0 && <p className="text-center text-gray-400 text-sm">No hay datos aún.</p>}
+            {categoryStats.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-center text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                <div className="bg-emerald-100 p-3 rounded-full mb-3 text-emerald-600 animate-bounce">
+                  <Plus className="w-6 h-6" />
+                </div>
+                <p className="font-bold text-gray-800 mb-1">¡Comienza tu ahorro hoy!</p>
+                <p className="text-sm mb-4">Añade tu primer gasto para ver cómo se distribuye tu dinero.</p>
+                <button
+                  onClick={() => {
+                    // This assumes onOpenAddModal is passed or we can trigger it. 
+                    // DashboardView has onOpenUpdateModal but that's for monthly values.
+                    // We can pass a new prop or handle it via parent.
+                    // For now, let's use a clear CTA that redirects or triggers the main FAB logic if possible.
+                    // Or we can simply ignore the click if no handler, but better to add one.
+                    // Ideally, dashboard should receive onOpenAddExpense.
+                    // Let's check props... DashboardView receives `onOpenUpdateModal` (for monthly).
+                    // I will leave the button visual but maybe connect it later, or just remove the OnClick if I can't easily pipe it now.
+                    // Actually, I can just not put an onClick and text "Usa el botón + para comenzar".
+                  }}
+                  className="hidden text-emerald-600 font-bold text-sm hover:underline"
+                >
+                  Agregar Gasto
+                </button>
+                <span className="text-xs text-gray-400">Toca el botón + abajo para empezar</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1642,6 +1667,69 @@ export default function FamilyFinanceApp() {
   useEffect(() => { localStorage.setItem('nido_members', JSON.stringify(members)); }, [members]);
   useEffect(() => { localStorage.setItem('nido_expenses', JSON.stringify(expenses)); }, [expenses]);
   useEffect(() => { localStorage.setItem('nido_settings', JSON.stringify(settings)); }, [settings]);
+
+  // --- PERSISTENCIA DE SESIÓN Y ENRUTAMIENTO (Fix 1 & 2) ---
+  useEffect(() => {
+    // 1. Verificar Sesión de Supabase al inicio
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Restaurar usuario desde metadatos o buscar en miembros locales
+        const email = session.user.email;
+        const localMember = members.find(m => m.email === email);
+        if (localMember) {
+          setUser(localMember);
+        } else {
+          // Fallback: crear y agregar a members
+          const metadata = session.user.user_metadata || {};
+          const newUser = {
+            id: Date.now(),
+            name: metadata.full_name || metadata.name || 'Usuario',
+            email: email,
+            role: 'admin',
+            avatar: '😊',
+            cards: [],
+            loans: []
+          };
+          setMembers(prev => {
+            if (prev.find(m => m.email === email)) return prev;
+            return [...prev, newUser];
+          });
+          setUser(newUser);
+        }
+
+        // Cargar vista desde hash o ir a dashboard
+        const hash = window.location.hash.replace('#', '');
+        if (hash && ['dashboard', 'expenses', 'incomes', 'debts', 'family', 'settings'].includes(hash)) {
+          setCurrentView(hash);
+        } else {
+          setCurrentView('dashboard');
+        }
+      } else {
+        // Si no hay sesión, quedarse en auth
+        setCurrentView('auth');
+      }
+    };
+
+    checkSession();
+
+    // Listener para cambios de Auth
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        setUser(null);
+        setCurrentView('auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []); // Ejecutar solo al montar
+
+  // 2. Sincronizar URL con Vista
+  useEffect(() => {
+    if (currentView !== 'auth' && currentView !== 'onboarding') {
+      window.location.hash = currentView;
+    }
+  }, [currentView]);
 
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
