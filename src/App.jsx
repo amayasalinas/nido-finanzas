@@ -1269,7 +1269,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
         <LogOut className="w-5 h-5 mr-2" /> Cerrar Sesión
       </button>
 
-      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.4.1 (FINAL)</p>
+      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.5.0 (PORTAL FIXED)</p>
 
       {/* US-13 Modal Notificaciones */}
       {showNotifications && ReactDOM.createPortal(
@@ -1454,7 +1454,7 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
   const fileInputRef = React.useRef(null);
 
   if (!isOpen) return null;
-  if (!members || members.length === 0) return null; // Safe return to prevent crash
+  // removed strict members check to allow opening even if loading
 
   const handleScanInvoice = async (file) => {
     setIsScanning(true);
@@ -1468,12 +1468,12 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
         const base64Image = reader.result.split(',')[1];
 
         // 2. Prompt para Gemini Vision
-        const prompt = `Analiza esta factura/recibo. Extrae: 
-        1. Título del gasto (ej: Netflix, Claro, EPM).
-        2. Monto total (solo números).
-        3. Fecha límite de pago o fecha de la factura (YYYY-MM-DD).
-        
-        Responde SOLO un JSON así: {"title": "...", "amount": 000, "dueDate": "YYYY-MM-DD"}`;
+        const prompt = `Analiza esta factura/recibo. Extrae:
+      1. Título del gasto (ej: Netflix, Claro, EPM).
+      2. Monto total (solo números).
+      3. Fecha límite de pago o fecha de la factura (YYYY-MM-DD).
+
+      Responde SOLO un JSON así: {"title": "...", "amount": 000, "dueDate": "YYYY-MM-DD"}`;
 
         // NOTA: Para enviar imágenes a la API REST de Gemini se requiere una estructura específica (inlineData).
         // Aquí simulamos la llamada con texto, pero para imágenes reales se necesita ajustar 'callGeminiAPI' o crear 'callGeminiVisionAPI'.
@@ -1514,7 +1514,7 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
     }
   }, [newExpense.category]);
 
-  return (
+  const content = (
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
       <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 animate-slide-up sm:animate-none max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
@@ -1629,6 +1629,8 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
       </div>
     </div>
   );
+
+  return ReactDOM.createPortal(content, document.body);
 };
 
 const MemberEditModal = ({ isOpen, onClose, member, onSave, onDelete }) => {
@@ -1974,7 +1976,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.4.1</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.5.0</p>
           </div>
         </div>
       </aside>
