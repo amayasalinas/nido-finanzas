@@ -777,7 +777,7 @@ const DashboardView = ({ totalIncome, totalExpenses, healthScore, categoryStats,
         <div className="col-span-1 md:col-span-2 lg:col-span-2">
           <h3 className="font-bold text-gray-800 text-lg mb-3 px-1 flex items-center"><PieChart className="w-5 h-5 mr-2 text-emerald-600" />Distribución de Gastos</h3>
           <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-4">
-            {categoryStats.map(stat => (
+            {categoryStats.filter(s => s.amount > 0).map(stat => (
               <div key={stat.key}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="font-medium text-gray-700">{stat.label}</span>
@@ -1553,8 +1553,8 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Responsable</label>
             <div className="relative">
               <User className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-              <select className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none transition" value={newExpense.responsibleId || ''} onChange={e => setNewExpense({ ...newExpense, responsibleId: parseInt(e.target.value) })}>
-                {members.map(m => <option key={m.id} value={m.id}>{m.name} ({m.role === 'admin' ? 'Admin' : 'Miembro'})</option>)}
+              <select className="w-full border border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-3 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none transition" value={newExpense.responsibleId || (members.length > 0 ? members[0].id : '')} onChange={e => setNewExpense({ ...newExpense, responsibleId: parseInt(e.target.value) })}>
+                {members && members.length > 0 ? members.map(m => <option key={m.id} value={m.id}>{m.name} ({m.role === 'admin' ? 'Admin' : 'Miembro'})</option>) : <option value="" disabled>Cargando miembros...</option>}
               </select>
             </div>
           </div>
@@ -1564,6 +1564,7 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
             <div className="grid grid-cols-3 gap-2">
               {Object.entries(CATEGORIES).map(([key, val]) => {
                 const Icon = val.icon;
+                if (!Icon) return null;
                 return (
                   <button
                     key={key}
