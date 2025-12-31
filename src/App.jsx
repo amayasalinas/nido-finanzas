@@ -242,6 +242,48 @@ const CATEGORIES = {
   otros: { icon: AlertCircle, color: 'bg-gray-100 text-gray-600', label: 'Otros', defaultRecurrence: { isRecurring: false, type: 'fixed' } }
 };
 
+const PUBLIC_SERVICES = {
+  agua: {
+    label: "Agua y Alcantarillado",
+    providers: [
+      { name: "Acueducto de Bogotá", url: "https://pagos.acueducto.com.co/" },
+      { name: "EPM", url: "https://www.epm.com.co/clientesyusuarios/" },
+      { name: "Acuacar (Cartagena)", url: "https://www.acuacar.com/" },
+      { name: "Triple A (Barranquilla)", url: "https://www.aaa.com.co/" }
+    ]
+  },
+  energia: {
+    label: "Energía Eléctrica",
+    providers: [
+      { name: "Enel Colombia", url: "https://www.enel.com.co/" },
+      { name: "EPM", url: "https://www.epm.com.co/" },
+      { name: "Afinia", url: "https://www.afinia.com.co/" },
+      { name: "Air-e", url: "https://www.air-e.com/" },
+      { name: "Celsia", url: "https://www.celsia.com/" }
+    ]
+  },
+  gas: {
+    label: "Gas Natural",
+    providers: [
+      { name: "Vanti", url: "https://www.grupovanti.com/" },
+      { name: "EPM", url: "https://www.epm.com.co/" },
+      { name: "Gases del Caribe", url: "https://gascaribe.com/" },
+      { name: "Alcanos", url: "https://alcanos.com.co/" }
+    ]
+  },
+  telecom: {
+    label: "Internet, TV y Telefonía",
+    providers: [
+      { name: "Claro", url: "https://portalpagos.claro.com.co/" },
+      { name: "Movistar", url: "https://www.movistar.com.co/" },
+      { name: "Tigo", url: "https://transacciones.tigo.com.co/" },
+      { name: "ETB", url: "https://etb.com/" },
+      { name: "WOM", url: "https://www.wom.co/" },
+      { name: "Directv", url: "https://www.directv.com.co/" }
+    ]
+  }
+};
+
 // --- MOCK DATA ---
 
 const INITIAL_MEMBERS = [
@@ -1522,7 +1564,8 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, editExpe
 };
 
 const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) => {
-  const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '' });
+
+  const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '', serviceType: '', provider: '' });
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const fileInputRef = useRef(null);
@@ -1537,7 +1580,8 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
           responsibleId: initialData.responsibleId || members[0]?.id // Fallback
         });
       } else {
-        setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '' });
+
+        setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '', serviceType: '', provider: '' });
       }
       setScanResult(null);
     }
@@ -1618,6 +1662,45 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
               </select>
             </div>
           </div>
+
+          {/* US-15: Public Services Logic */}
+          {data.category === 'servicios' && (
+            <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100 space-y-3 animate-fade-in">
+              <h4 className="text-sm font-bold text-yellow-800 flex items-center gap-2"><Zap className="w-4 h-4" /> Configuración de Servicio Público</h4>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Tipo de Servicio</label>
+                  <select
+                    className="w-full border-gray-200 bg-white rounded-xl py-2 px-3 focus:ring-2 focus:ring-yellow-500 outline-none font-medium text-sm"
+                    value={data.serviceType}
+                    onChange={e => setData(prev => ({ ...prev, serviceType: e.target.value, provider: '', paymentUrl: '' }))}
+                  >
+                    <option value="">Selecciona...</option>
+                    {Object.entries(PUBLIC_SERVICES).map(([key, svc]) => (
+                      <option key={key} value={key}>{svc.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Empresa</label>
+                  <select
+                    className="w-full border-gray-200 bg-white rounded-xl py-2 px-3 focus:ring-2 focus:ring-yellow-500 outline-none font-medium text-sm"
+                    value={data.provider}
+                    disabled={!data.serviceType}
+                    onChange={e => {
+                      const selectedProvider = PUBLIC_SERVICES[data.serviceType].providers.find(p => p.name === e.target.value);
+                      setData(prev => ({ ...prev, provider: e.target.value, paymentUrl: selectedProvider?.url || '' }));
+                    }}
+                  >
+                    <option value="">Selecciona...</option>
+                    {data.serviceType && PUBLIC_SERVICES[data.serviceType].providers.map(p => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4">
             <div className="flex-1">
@@ -2037,7 +2120,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.6.2</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.7.0</p>
           </div>
         );
       case 'real_settings':
@@ -2073,7 +2156,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.6.2</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.7.0</p>
           </div>
         </div>
       </aside>
@@ -2082,7 +2165,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.6.2</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.7.0</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
