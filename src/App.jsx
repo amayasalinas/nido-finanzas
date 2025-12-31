@@ -851,7 +851,7 @@ const DashboardView = ({ totalIncome, totalExpenses, healthScore, categoryStats,
 };
 
 // ... (IncomeView, DebtsView, FamilyView, SettingsView, ExpensesView, MemberEditModal - Mantienen su lógica)
-const IncomeView = ({ members, updateMembers, currency, triggerCurrencyModal, isAdding, onClose, triggerConfirm }) => {
+const IncomeView = ({ members, updateMembers, currency, triggerCurrencyModal, isAdding, onClose, triggerConfirm, onOpenAdd }) => {
   const [newSource, setNewSource] = useState({ memberId: '', source: '', amount: '', isVariable: false });
   const [editingIncome, setEditingIncome] = useState(null);
 
@@ -911,7 +911,12 @@ const IncomeView = ({ members, updateMembers, currency, triggerCurrencyModal, is
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="flex items-center justify-between mb-2"><h2 className="text-2xl font-bold text-gray-800">Ingresos Familiares</h2></div>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold text-gray-800">Ingresos Familiares</h2>
+        <button onClick={onOpenAdd} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm active:scale-95">
+          <Plus className="w-5 h-5" /> Nuevo
+        </button>
+      </div>
       <p className="text-sm text-gray-500 mb-4">Añade todas las fuentes de ingreso de tu hogar.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {members.map(member => (
@@ -967,7 +972,7 @@ const IncomeView = ({ members, updateMembers, currency, triggerCurrencyModal, is
     </div>
   );
 };
-const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settings, addExpense, triggerConfirm }) => {
+const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settings, addExpense, triggerConfirm, onOpenAdd }) => {
   const [activeTab, setActiveTab] = useState('cards');
   const [newItem, setNewItem] = useState({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' });
   const [cardPaymentModal, setCardPaymentModal] = useState(null);
@@ -1017,8 +1022,11 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 px-1">
         <h2 className="text-2xl font-bold text-gray-800">Deudas & Tarjetas</h2>
+        <button onClick={onOpenAdd} className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm active:scale-95">
+          <Plus className="w-5 h-5" /> Nueva Deuda
+        </button>
       </div>
       <div className="flex p-1 bg-gray-100 rounded-xl">
         <button onClick={() => setActiveTab('cards')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'cards' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Tarjetas</button>
@@ -1261,7 +1269,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
         <LogOut className="w-5 h-5 mr-2" /> Cerrar Sesión
       </button>
 
-      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.2.0 (Build 20251231 - FIXED)</p>
+      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.3.0 (Build 20251231 - STABLE)</p>
 
       {/* US-13 Modal Notificaciones */}
       {showNotifications && ReactDOM.createPortal(
@@ -1426,6 +1434,7 @@ const AddExpenseModal = ({ isOpen, onClose, onSubmit, newExpense, setNewExpense,
   const fileInputRef = React.useRef(null);
 
   if (!isOpen) return null;
+  if (!members || members.length === 0) return null; // Safe return to prevent crash
 
   const handleScanInvoice = async (file) => {
     setIsScanning(true);
@@ -1835,19 +1844,24 @@ export default function FamilyFinanceApp() {
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard':
-        return <DashboardView
-          totalIncome={totalIncome}
-          totalExpenses={totalExpensesVal}
-          categoryStats={categoryStats}
-          expenses={expenses}
-          members={members}
-          toggleStatus={toggleStatus}
-          deleteExpense={deleteExpense}
-          currency={activeCurrencySymbol}
-          categoryData={CATEGORIES}
-          triggerConfirm={triggerConfirm}
-          onOpenUpdateModal={() => setShowUpdateModal(true)}
-        />;
+        return (
+          <>
+            <style>{styles}</style>
+            <DashboardView
+              totalIncome={totalIncome}
+              totalExpenses={totalExpensesVal}
+              categoryStats={categoryStats}
+              expenses={expenses}
+              members={members}
+              toggleStatus={toggleStatus}
+              deleteExpense={deleteExpense}
+              currency={activeCurrencySymbol}
+              categoryData={CATEGORIES}
+              triggerConfirm={triggerConfirm}
+              onOpenUpdateModal={() => setShowUpdateModal(true)}
+            />
+          </>
+        );
       case 'expenses':
         return <ExpensesView
           expenses={expenses}
@@ -1868,23 +1882,19 @@ export default function FamilyFinanceApp() {
           isAdding={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           triggerConfirm={triggerConfirm}
+          onOpenAdd={() => setIsAddModalOpen(true)}
         />;
       case 'debts':
         return <DebtsView
           members={members}
           updateMembers={setMembers}
           currency={activeCurrencySymbol}
-          isAdding={isAddModalOpen} // Reusing global modal state for simplicity in add mode? Actually DebtsView handles its own add modal usually or we need to pass a flag.
-          // For this implementation, let's assume DebtsView has its own add button inside that calls `isAdding` prop?
-          // Looking at DebtsView code: It takes `isAdding` as prop to show modal. 
-          // So we need a way to trigger add in DebtsView. 
-          // Let's pass `isAdding` as `currentView === 'debts' && isAddModalOpen` if user clicks general FAB?
-          // Or better, let DebtsView handle it. DebtsView in Part 4 code uses 'isAdding' prop to SHOW existing modal.
-          // We need a way to toggle it.
+          isAdding={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           settings={settings}
           addExpense={addExpense}
           triggerConfirm={triggerConfirm}
+          onOpenAdd={() => setIsAddModalOpen(true)}
         />;
       case 'family':
         return <FamilyView members={members} updateMembers={setMembers} triggerConfirm={triggerConfirm} />;
@@ -1945,7 +1955,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.2.0 (FIXED)</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.3.0 (STABLE)</p>
           </div>
         </div>
       </aside>
