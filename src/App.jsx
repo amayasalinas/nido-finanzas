@@ -1463,7 +1463,7 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
 
 // --- NUEVO COMPONENTE: Creador de Gastos (Re-implements AddExpenseModal) ---
 const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
-  const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
+  const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '' });
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const fileInputRef = useRef(null);
@@ -1471,7 +1471,7 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
   // Reset form on open
   useEffect(() => {
     if (isOpen) {
-      setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
+      setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '' });
       setScanResult(null);
     }
   }, [isOpen, members]);
@@ -1527,11 +1527,21 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
           </div>
 
           <div className="flex gap-4">
+            {/* Dynamic Amount logic based on Recurrence Type */}
             <div className="flex-1">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Monto</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">
+                {data.isRecurring && data.recurrenceType === 'variable' ? 'Monto Estimado' : 'Monto'}
+              </label>
               <div className="relative">
                 <span className="absolute left-4 top-3.5 font-bold text-gray-400">$</span>
-                <input type="text" inputMode="numeric" className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 pl-8 pr-4 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-gray-900 text-lg transition" placeholder="0" value={formatCurrencyInput(data.amount)} onChange={e => setData({ ...data, amount: parseCurrencyInput(e.target.value) })} />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={`w-full border-gray-200 bg-gray-50 rounded-xl py-3 pl-8 pr-4 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-gray-900 text-lg transition ${data.isRecurring && data.recurrenceType === 'variable' ? 'bg-yellow-50/50' : ''}`}
+                  placeholder={data.isRecurring && data.recurrenceType === 'variable' ? '(Pendiente)' : '0'}
+                  value={formatCurrencyInput(data.amount)}
+                  onChange={e => setData({ ...data, amount: parseCurrencyInput(e.target.value) })}
+                />
               </div>
             </div>
             <div className="flex-1">
@@ -1555,9 +1565,66 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members }) => {
             </div>
           </div>
 
+          {/* Link de Pago */}
+          <div>
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Link de Pago Digital</label>
+            <div className="relative">
+              <Globe className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+              <input type="url" className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 pl-10 pr-4 focus:ring-2 focus:ring-emerald-500 outline-none font-medium transition text-gray-600" placeholder="https://portal.pagos.com" value={data.paymentUrl} onChange={e => setData({ ...data, paymentUrl: e.target.value })} />
+            </div>
+          </div>
+
+          {/* Recurrence Block */}
+          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Repeat className="w-5 h-5 text-emerald-600" />
+                <span className="font-bold text-sm text-gray-700">Gasto Recurrente</span>
+                {data.isRecurring && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${data.recurrenceType === 'variable' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {data.recurrenceType === 'variable' ? 'Variable' : 'Fijo'}
+                  </span>
+                )}
+              </div>
+              <input type="checkbox" className="w-5 h-5 accent-emerald-600" checked={data.isRecurring} onChange={e => setData({ ...data, isRecurring: e.target.checked })} />
+            </div>
+
+            {data.isRecurring && (
+              <div className="space-y-3 animate-fade-in">
+                <div className="flex bg-white rounded-lg p-1 border border-gray-200">
+                  <button onClick={() => setData({ ...data, recurrenceType: 'fixed' })} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${data.recurrenceType === 'fixed' ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-gray-400'}`}>= Valor Fijo</button>
+                  <button onClick={() => setData({ ...data, recurrenceType: 'variable' })} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${data.recurrenceType === 'variable' ? 'bg-yellow-50 text-yellow-700 shadow-sm' : 'text-gray-400'}`}>≈ Valor Variable</button>
+                </div>
+
+                {/* Bill Arrival Day Logic (US-07) */}
+                {data.recurrenceType === 'variable' && (
+                  <div className="bg-yellow-50/50 p-3 rounded-lg border border-yellow-100">
+                    <label className="text-xs font-bold text-yellow-800 mb-1 block">¿Qué día del mes llega la factura?</label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-500">Día</span>
+                      <input
+                        type="number" min="1" max="31"
+                        className="w-16 border-yellow-200 focus:ring-yellow-500 rounded-lg py-1.5 px-2 text-center font-bold text-gray-800"
+                        value={data.billArrivalDay}
+                        onChange={e => setData({ ...data, billArrivalDay: e.target.value })}
+                      />
+                      <span className="text-[10px] text-gray-400">(Te avisaremos para ingresar el valor)</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Auto Debit Toggle */}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-200/50">
+              <span className="text-sm font-medium text-gray-600">Débito Automático</span>
+              <input type="checkbox" className="w-5 h-5 accent-emerald-600" checked={data.isAutoDebit} onChange={e => setData({ ...data, isAutoDebit: e.target.checked })} />
+            </div>
+          </div>
+
           {/* Submit Button */}
           <button onClick={() => onSave(data)} className="w-full bg-emerald-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-xl mt-4 active:scale-95">
-            Crear Gasto
+            {data.isRecurring && data.recurrenceType === 'variable' && !data.amount ? 'Crear Gasto Variable' : 'Crear Gasto'}
           </button>
         </div>
       </div>
@@ -1897,7 +1964,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.5.9</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.6.0</p>
           </div>
         );
       case 'real_settings':
@@ -1933,7 +2000,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.5.9</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.6.0</p>
           </div>
         </div>
       </aside>
@@ -1942,7 +2009,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.5.9</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.6.0</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
