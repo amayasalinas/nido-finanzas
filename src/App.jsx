@@ -1261,7 +1261,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
         <LogOut className="w-5 h-5 mr-2" /> Cerrar Sesión
       </button>
 
-      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.1.0 (Build 20251230)</p>
+      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.2.0 (Build 20251231 - FIXED)</p>
 
       {/* US-13 Modal Notificaciones */}
       {showNotifications && ReactDOM.createPortal(
@@ -1945,6 +1945,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.2.0 (FIXED)</p>
           </div>
         </div>
       </aside>
