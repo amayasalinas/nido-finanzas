@@ -1952,7 +1952,9 @@ export default function FamilyFinanceApp() {
       {/* Mobile Header & Nav */}
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
-          <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">Hola, {user?.name?.split(' ')[0] || 'Usuario'}</h1>
+          <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
+            Hola, {user?.name?.split(' ')[0] || 'Usuario'} <span className="text-[10px] text-gray-400 font-normal ml-1 border px-1 rounded bg-gray-50">v1.2</span>
+          </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
         <button onClick={() => setCurrentView('real_settings')} className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-lg border border-gray-200 shadow-sm active:scale-95 transition">
