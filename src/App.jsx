@@ -1269,7 +1269,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
         <LogOut className="w-5 h-5 mr-2" /> Cerrar Sesión
       </button>
 
-      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.3.0 (Build 20251231 - STABLE)</p>
+      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.4.1 (FINAL)</p>
 
       {/* US-13 Modal Notificaciones */}
       {showNotifications && ReactDOM.createPortal(
@@ -1371,8 +1371,19 @@ const ExpenseCard = ({ expense, members, toggleStatus, deleteExpense, currency, 
   );
 };
 
-const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency, categories, triggerConfirm, onOpenAddModal }) => {
+const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency, categories, triggerConfirm, onOpenAddModal, addExpense, isAdding, onClose }) => {
   const [filter, setFilter] = useState('all');
+  // Local state for the modal, initialized safely
+  const [newExpense, setNewExpense] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
+  // If we receive "isAdding" from parent, we use it to show modal.
+  // Actually, we can use local state if independent, but App controls routing.
+  // Let's rely on `isAdding` prop from App.
+
+  const handleAddExpense = () => {
+    addExpense(newExpense);
+    setNewExpense({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
+    onClose(); // Close via prop
+  };
 
   const filteredExpenses = useMemo(() => {
     let result = expenses;
@@ -1424,6 +1435,15 @@ const ExpensesView = ({ expenses, members, toggleStatus, deleteExpense, currency
           </div>
         )}
       </div>
+      {/* Render AddExpenseModal Locally */}
+      <AddExpenseModal
+        isOpen={isAdding}
+        onClose={onClose}
+        onSubmit={handleAddExpense}
+        newExpense={newExpense}
+        setNewExpense={setNewExpense}
+        members={members}
+      />
     </div>
   );
 };
@@ -1799,7 +1819,6 @@ export default function FamilyFinanceApp() {
   const addExpense = (expenseData) => {
     setExpenses(prev => [...prev, { ...expenseData, id: Date.now(), status: 'pending' }]);
     setIsAddModalOpen(false);
-    setNewExpense({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, isAutoDebit: false });
   };
 
   const deleteExpense = (id) => {
@@ -1955,7 +1974,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.3.0 (STABLE)</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.4.1</p>
           </div>
         </div>
       </aside>
@@ -2002,15 +2021,7 @@ export default function FamilyFinanceApp() {
         <NavButton active={['settings', 'family', 'debts', 'real_settings'].includes(currentView)} onClick={() => setCurrentView('settings')} icon={Settings} label="Menú" />
       </div>
 
-      {/* Modals */}
-      <AddExpenseModal
-        isOpen={isAddModalOpen && currentView !== 'debts' && currentView !== 'incomes'} // Hide global modal when views handle their own
-        onClose={() => setIsAddModalOpen(false)}
-        onSubmit={() => addExpense(newExpense)}
-        newExpense={newExpense}
-        setNewExpense={setNewExpense}
-        members={members}
-      />
+      {/* AddExpenseModal is now handled locally in ExpensesView */}
       <MemberEditModal
         isOpen={!!editingMember}
         onClose={() => setEditingMember(null)}
