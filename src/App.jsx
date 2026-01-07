@@ -1638,6 +1638,13 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
           </div>
 
           <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Categoría</label>
+              <select className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none font-medium appearance-none transition" value={data.category} onChange={e => setData({ ...data, category: e.target.value })}>
+                {Object.entries(CATEGORIES).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}
+              </select>
+            </div>
+
             {/* Dynamic Amount logic based on Recurrence Type */}
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">
@@ -1655,12 +1662,6 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
                 />
               </div>
             </div>
-            <div className="flex-1">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 block">Categoría</label>
-              <select className="w-full border-gray-200 bg-gray-50 rounded-xl py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none font-medium appearance-none transition" value={data.category} onChange={e => setData({ ...data, category: e.target.value })}>
-                {Object.entries(CATEGORIES).map(([key, cat]) => <option key={key} value={key}>{cat.label}</option>)}
-              </select>
-            </div>
           </div>
 
           {/* US-15: Public Services Logic */}
@@ -1676,6 +1677,8 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
                     onChange={e => setData(prev => ({ ...prev, serviceType: e.target.value, provider: '', paymentUrl: '' }))}
                   >
                     <option value="">Selecciona...</option>
+                    {/* Add Multi-Service Proposal */}
+                    <option value="multi" className="font-bold text-emerald-600">★ Factura Integrada (EPM, etc)</option>
                     {Object.entries(PUBLIC_SERVICES).map(([key, svc]) => (
                       <option key={key} value={key}>{svc.label}</option>
                     ))}
@@ -1688,12 +1691,23 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
                     value={data.provider}
                     disabled={!data.serviceType}
                     onChange={e => {
-                      const selectedProvider = PUBLIC_SERVICES[data.serviceType].providers.find(p => p.name === e.target.value);
+                      // Handle Multi-Service or standard
+                      const providers = data.serviceType === 'multi'
+                        ? [{ name: "EPM (Agua/Luz/Gas)", url: "https://www.epm.com.co/clientesyusuarios/" }, { name: "Emcali", url: "https://www.emcali.com.co/" }]
+                        : PUBLIC_SERVICES[data.serviceType]?.providers;
+
+                      const selectedProvider = providers?.find(p => p.name === e.target.value);
                       setData(prev => ({ ...prev, provider: e.target.value, paymentUrl: selectedProvider?.url || '' }));
                     }}
                   >
                     <option value="">Selecciona...</option>
-                    {data.serviceType && PUBLIC_SERVICES[data.serviceType].providers.map(p => (
+                    {data.serviceType === 'multi' && (
+                      <>
+                        <option value="EPM (Agua/Luz/Gas)">EPM (Agua/Luz/Gas)</option>
+                        <option value="Emcali">Emcali (Multi-servicios)</option>
+                      </>
+                    )}
+                    {data.serviceType && data.serviceType !== 'multi' && PUBLIC_SERVICES[data.serviceType].providers.map(p => (
                       <option key={p.name} value={p.name}>{p.name}</option>
                     ))}
                   </select>
@@ -1977,9 +1991,20 @@ export default function FamilyFinanceApp() {
     setCurrentView('onboarding');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('nido_user'); // Legacy
+    localStorage.removeItem('nido_settings');
+    // NOTE: We do NOT clear 'nido_members' or 'nido_expenses' to allow offline access or multi-user device sharing without data loss, 
+    // BUT for the requested bug fix (ghost data), we will force clear if it's causing issues.
+    // User requested: "todo el usuario se había eliminado... pero hay gasto pendiente".
+    // Better strategy: Clear specific session keys but keep data if we want offline. 
+    // Given the bug report implies data leaking between users -> FORCE CLEAR EVERYTHING.
+    localStorage.clear();
     setUser(null);
     setCurrentView('auth');
+    setMembers([]); // Reset state
+    setExpenses([]);
   };
 
   const addExpense = (expenseData) => {
@@ -2120,7 +2145,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.7.0</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.7.1</p>
           </div>
         );
       case 'real_settings':
@@ -2156,7 +2181,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.7.0</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.7.1</p>
           </div>
         </div>
       </aside>
@@ -2165,7 +2190,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.7.0</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.7.1</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
