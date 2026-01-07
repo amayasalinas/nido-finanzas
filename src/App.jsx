@@ -1568,6 +1568,7 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
   const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '', serviceType: '', provider: '' });
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
+  const [scannedImages, setScannedImages] = useState([]); // Array to hold up to 2 images
   const fileInputRef = useRef(null);
 
   // Reset/Populate form on open
@@ -1584,6 +1585,7 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
         setData({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '', serviceType: '', provider: '' });
       }
       setScanResult(null);
+      setScannedImages([]);
     }
   }, [isOpen, members, initialData]);
 
@@ -1598,10 +1600,15 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
   }, [data.category, initialData]);
 
   const handleScan = async (file) => {
+    if (scannedImages.length >= 2) return;
     setIsScanning(true);
-    // Simulación de escaneo exitoso
+    // Simulación de escaneo exitoso que agrega la imagen
     setTimeout(() => {
-      setData(prev => ({ ...prev, title: "Factura Detectada", amount: 150000, dueDate: new Date().toISOString().split('T')[0] }));
+      setScannedImages(prev => [...prev, file]);
+      // Solo sobreescribir datos si es la primera imagen para no borrar ediciones manuales
+      if (scannedImages.length === 0) {
+        setData(prev => ({ ...prev, title: "Factura Detectada", amount: 150000, dueDate: new Date().toISOString().split('T')[0] }));
+      }
       setScanResult("¡Lectura exitosa!");
       setIsScanning(false);
     }, 1500);
@@ -1621,14 +1628,25 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
         </div>
 
         {/* Scanner Widget */}
-        <div onClick={() => fileInputRef.current?.click()} className="mb-6 bg-indigo-50 border border-dashed border-indigo-200 rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:bg-indigo-100 transition group relative overflow-hidden">
-          <div className="bg-white p-3 rounded-full shadow-sm text-indigo-600 group-hover:scale-110 transition">{isScanning ? <Loader2 className="animate-spin" /> : <Camera />}</div>
-          <div>
-            <p className="font-bold text-indigo-900 text-sm">Escaneo Inteligente</p>
-            <p className="text-xs text-indigo-600/80">Sube tu factura y la IA llenará todo.</p>
-            {scanResult && <p className="text-xs font-bold text-emerald-600 mt-1">{scanResult}</p>}
+        {/* Scanner Widget */}
+        <div
+          onClick={() => { if (scannedImages.length < 2) fileInputRef.current?.click(); }}
+          className={`mb-6 bg-indigo-50 border border-dashed border-indigo-200 rounded-xl p-4 flex items-center gap-4 transition group relative overflow-hidden ${scannedImages.length >= 2 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-indigo-100'}`}
+        >
+          <div className="bg-white p-3 rounded-full shadow-sm text-indigo-600 group-hover:scale-110 transition">
+            {isScanning ? <Loader2 className="animate-spin" /> : <Camera />}
           </div>
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
+          <div className="flex-1">
+            <div className="flex justify-between items-center">
+              <p className="font-bold text-indigo-900 text-sm">Escaneo Inteligente ({scannedImages.length}/2)</p>
+              {scannedImages.length > 0 && <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-bold">{scannedImages.length === 1 ? 'Foto Reverso Pendiente' : 'Completo'}</span>}
+            </div>
+            <p className="text-xs text-indigo-600/80">
+              {scannedImages.length === 0 ? "Sube foto frontal de la factura." : (scannedImages.length === 1 ? "¡Bien! Ahora sube el reverso." : "Imágenes cargadas.")}
+            </p>
+            {scanResult && <p className="text-xs font-bold text-emerald-600 mt-1">{scanResult} ({scannedImages.length} img)</p>}
+          </div>
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} disabled={scannedImages.length >= 2} />
         </div>
 
         <div className="space-y-5">
@@ -2145,7 +2163,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.7.1</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.7.2</p>
           </div>
         );
       case 'real_settings':
