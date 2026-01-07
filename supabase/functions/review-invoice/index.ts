@@ -19,25 +19,34 @@ serve(async (req) => {
             throw new Error('No imageUrl provided');
         }
 
-        const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-        if (!OPENAI_API_KEY) {
-            throw new Error('Missing OPENAI_API_KEY');
+        const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+        if (!GEMINI_API_KEY) {
+            throw new Error('Missing GEMINI_API_KEY');
         }
 
-        console.log("Analyzing invoice:", imageUrl);
+        console.log("Fetching image:", imageUrl);
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        // 1. Fetch image and convert to Base64
+        const imageResp = await fetch(imageUrl);
+        if (!imageResp.ok) throw new Error(`Failed to fetch image: ${imageResp.statusText}`);
+        const imageBlob = await imageResp.blob();
+        const arrayBuffer = await imageBlob.arrayBuffer();
+        const base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const mimeType = imageBlob.type || 'image/jpeg';
+
+        console.log("Analyzing with Gemini 1.5 Flash...");
+
+        // 2. Call Gemini API
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'gpt-4o',
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are an expert accountant assistant for a Colombian family. 
+                contents: [{
+                    parts: [
+                        {
+                            text: `You are an expert accountant assistant for a Colombian family. 
             Extract data from the invoice image and return ONLY a valid JSON object.
             
             Fields required:
@@ -50,30 +59,34 @@ serve(async (req) => {
             - dueDate: The "Pagar hasta" or "Pago Oportuno" date in YYYY-MM-DD format.
             - isRecurring: true/false (usually true for utilities/subscriptions).
             
-            If a field is not found, use null. ensure numeric amount has no periods/commas if possible, or standard float format.`
-                    },
-                    {
-                        role: 'user',
-                        content: [
-                            { type: 'text', text: "Extract data from this invoice." },
-                            { type: 'image_url', image_url: { url: imageUrl } }
-                        ]
-                    }
-                ],
-                max_tokens: 500
+            If a field is not found, use null. Return purely JSON, no markdown headers.` },
+                        {
+                            inline_data: {
+                                mime_type: mimeType,
+                                data: base64Image
+                            }
+                        }
+                    ]
+                }],
+                generationConfig: {
+                    response_mime_type: "application/json"
+                }
             }),
         });
 
         const data = await response.json();
-        console.log("OpenAI Response:", data);
 
         if (data.error) {
+            console.error("Gemini Error:", data.error);
             throw new Error(data.error.message);
         }
 
-        const content = data.choices[0].message.content;
+        const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        console.log("Gemini Raw Response:", content);
 
-        // Extract JSON from markdown code block if present
+        if (!content) throw new Error("No content returned from Gemini");
+
+        // Clean up potential markdown blocks although response_mime_type usually handles it
         const jsonStr = content.replace(/```json\n|\n```/g, '');
         const extractedData = JSON.parse(jsonStr);
 
