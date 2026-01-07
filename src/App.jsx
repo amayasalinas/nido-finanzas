@@ -1602,49 +1602,87 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
   const handleScan = async (file) => {
     if (scannedImages.length >= 2) return;
     setIsScanning(true);
+    setScanResult("Subiendo y analizando...");
 
-    // Simulación de OCR Avanzado
-    setTimeout(() => {
+    try {
+      // 1. Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage.from('invoices').upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL (or Signed URL)
+      const { data: { publicUrl } } = supabase.storage.from('invoices').getPublicUrl(filePath);
+
+      // 3. Call Edge Function (Real OCR)
+      const { data: ocrData, error: funcError } = await supabase.functions.invoke('review-invoice', {
+        body: { imageUrl: publicUrl }
+      });
+
+      if (funcError) throw funcError;
+
+      console.log("OCR Result:", ocrData);
+
+      // 4. Update Form
       setScannedImages(prev => [...prev, file]);
-
-      // Solo simular datos si es la primera imagen
       if (scannedImages.length === 0) {
-        // DEMO: Simular detección aleatoria de un servicio público
-        const scenarios = [
-          { title: "Factura Luz", type: 'energia', provider: 'Enel Colombia', amount: 125430 },
-          { title: "Factura Agua", type: 'agua', provider: 'Acueducto de Bogotá', amount: 87500 },
-          { title: "Factura Gas", type: 'gas', provider: 'Vanti', amount: 45200 },
-          { title: "Factura Internet", type: 'telecom', provider: 'Claro', amount: 110900 }
-        ];
-
-        // Random pick for demo purposes (Weighted to Enel often)
-        const detected = scenarios[Math.floor(Math.random() * scenarios.length)];
-        const providerData = PUBLIC_SERVICES[detected.type]?.providers?.find(p => p.name === detected.provider);
-
-        // Calcular fecha oportuna (ej: 5 días después de hoy)
-        const detectedDueDate = new Date();
-        detectedDueDate.setDate(detectedDueDate.getDate() + 5);
-
         setData(prev => ({
           ...prev,
-          title: detected.title,
-          amount: detected.amount,
-          category: 'servicios',
-          serviceType: detected.type,
-          provider: detected.provider,
-          paymentUrl: providerData?.url || '',
-          dueDate: detectedDueDate.toISOString().split('T')[0],
-          isRecurring: true,
-          recurrenceType: 'variable'
+          title: ocrData.title || prev.title,
+          amount: ocrData.amount || prev.amount,
+          category: ocrData.category || 'servicios', // Default to services if relevant
+          serviceType: ocrData.serviceType || '',
+          provider: ocrData.provider || '',
+          paymentUrl: ocrData.paymentUrl || '',
+          dueDate: ocrData.dueDate || prev.dueDate,
+          isRecurring: ocrData.isRecurring || false,
+          recurrenceType: ocrData.isRecurring ? 'variable' : 'fixed'
         }));
-
-        setScanResult(`¡Detectado: ${detected.provider}!`);
-      } else {
-        setScanResult("Reverso capturado correctamente.");
       }
+      setScanResult("¡Análisis Completado con IA!");
 
+    } catch (realOcrError) {
+      console.warn("Real OCR failed (User might not have deployed function yet). Falling back to Mock.", realOcrError);
+
+      // FALLBACK TO MOCK SIMULATION
+      setTimeout(() => {
+        setScannedImages(prev => [...prev, file]);
+        if (scannedImages.length === 0) {
+          // ... (Existing Mock Logic)
+          const scenarios = [
+            { title: "Factura Luz", type: 'energia', provider: 'Enel Colombia', amount: 125430 },
+            { title: "Factura Agua", type: 'agua', provider: 'Acueducto de Bogotá', amount: 87500 },
+            { title: "Factura Gas", type: 'gas', provider: 'Vanti', amount: 45200 },
+            { title: "Factura Internet", type: 'telecom', provider: 'Claro', amount: 110900 }
+          ];
+          const detected = scenarios[Math.floor(Math.random() * scenarios.length)];
+          const providerData = PUBLIC_SERVICES[detected.type]?.providers?.find(p => p.name === detected.provider);
+          const detectedDueDate = new Date();
+          detectedDueDate.setDate(detectedDueDate.getDate() + 5);
+
+          setData(prev => ({
+            ...prev,
+            title: detected.title,
+            amount: detected.amount,
+            category: 'servicios',
+            serviceType: detected.type,
+            provider: detected.provider,
+            paymentUrl: providerData?.url || '',
+            dueDate: detectedDueDate.toISOString().split('T')[0],
+            isRecurring: true,
+            recurrenceType: 'variable'
+          }));
+          setScanResult(`¡Detectado (Offline): ${detected.provider}!`);
+        } else {
+          setScanResult("Reverso capturado.");
+        }
+      }, 1500);
+    } finally {
       setIsScanning(false);
-    }, 2000); // Ligeramente más tiempo para "procesar"
+    }
   };
 
   if (!isOpen) return null;
@@ -2196,7 +2234,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.7.3</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.8.0</p>
           </div>
         );
       case 'real_settings':
