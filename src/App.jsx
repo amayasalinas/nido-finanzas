@@ -189,16 +189,38 @@ const ROLES_BY_STATUS = {
 
 // --- FUENTES DE INGRESO ---
 const COLOMBIA_BANKS = [
+  // Bancos
   { id: 'bancolombia', name: 'Bancolombia', color: '#FDDA24' },
-  { id: 'davivienda', name: 'Davivienda', color: '#EF3340' },
-  { id: 'nu', name: 'Nu', color: '#820AD1' },
   { id: 'bogota', name: 'Banco de Bogotá', color: '#003366' },
+  { id: 'davivienda', name: 'Davivienda', color: '#EF3340' },
   { id: 'bbva', name: 'BBVA', color: '#004481' },
   { id: 'occidente', name: 'Banco de Occidente', color: '#003B71' },
-  { id: 'avvillas', name: 'AV Villas', color: '#005596' },
-  { id: 'rappicard', name: 'RappiCard', color: '#FF424D' },
-  { id: 'falabella', name: 'Banco Falabella', color: '#97D700' },
+  { id: 'popular', name: 'Banco Popular', color: '#005691' },
+  { id: 'avvillas', name: 'Banco AV Villas', color: '#005596' },
   { id: 'caja_social', name: 'Banco Caja Social', color: '#00548E' },
+  { id: 'agrario', name: 'Banco Agrario', color: '#355E3B' },
+  { id: 'falabella', name: 'Banco Falabella', color: '#97D700' },
+  { id: 'pichincha', name: 'Banco Pichincha', color: '#FFDD00' },
+  { id: 'bancoomeva', name: 'Bancoomeva', color: '#009643' },
+  { id: 'santander', name: 'Banco Santander', color: '#EC0000' },
+  { id: 'coopcentral', name: 'Banco Cooperativo Coopcentral', color: '#F18A00' },
+  { id: 'finandina', name: 'Banco Finandina', color: '#ED1C24' },
+  { id: 'mundo_mujer', name: 'Banco Mundo Mujer', color: '#E30613' },
+  { id: 'serfinanza', name: 'Banco Serfinanza', color: '#DA291C' },
+  { id: 'w', name: 'Banco W', color: '#F15A24' },
+  { id: 'bancamia', name: 'Bancamía', color: '#F38A00' },
+  { id: 'gnb', name: 'Banco GNB Sudameris', color: '#333333' },
+  { id: 'credifinanciera', name: 'Banco Credifinanciera', color: '#005CA9' },
+  { id: 'union', name: 'Banco Unión', color: '#FFD100' },
+  { id: 'btg', name: 'Banco BTG Pactual', color: '#002B49' },
+
+  // Neo-bancos / Otros
+  { id: 'nu', name: 'Nu Colombia', color: '#820AD1' },
+  { id: 'lulo', name: 'Lulo Bank', color: '#D2FF00' },
+  { id: 'rappicard', name: 'RappiCard', color: '#FF424D' },
+  { id: 'iris', name: 'Iris', color: '#27D3BF' },
+
+  // Default
   { id: 'otros', name: 'Otros / Prestamista', color: '#6B7280' }
 ];
 
@@ -1547,11 +1569,13 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
         </button>
       </div>
 
-      <button onClick={onLogout} className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-2xl mt-8 flex items-center justify-center hover:bg-red-100 transition">
-        <LogOut className="w-5 h-5 mr-2" /> Cerrar Sesión
-      </button>
-
-      <p className="text-center text-gray-400 text-xs mt-4">Nido App v5.5.0 (PORTAL FIXED)</p>
+      <div className="p-4 border-t border-gray-100">
+        <button onClick={onLogout} className="flex items-center gap-3 text-gray-500 hover:text-emerald-600 transition-colors w-full p-2 rounded-lg hover:bg-emerald-50 text-sm font-medium">
+          <LogOut size={18} />
+          Cerrar Sesión
+        </button>
+        <p className="text-xs text-center text-gray-300 mt-4">Nido App v5.9.1</p>
+      </div>
 
       {/* US-13 Modal Notificaciones */}
       {showNotifications && ReactDOM.createPortal(
@@ -2434,7 +2458,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.0</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.1</p>
           </div>
         );
       case 'real_settings':
