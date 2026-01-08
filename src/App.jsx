@@ -2234,7 +2234,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.8.1</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.8.2</p>
           </div>
         );
       case 'real_settings':
