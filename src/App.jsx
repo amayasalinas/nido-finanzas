@@ -188,6 +188,20 @@ const ROLES_BY_STATUS = {
 };
 
 // --- FUENTES DE INGRESO ---
+const COLOMBIA_BANKS = [
+  { id: 'bancolombia', name: 'Bancolombia', color: '#FDDA24' },
+  { id: 'davivienda', name: 'Davivienda', color: '#EF3340' },
+  { id: 'nu', name: 'Nu', color: '#820AD1' },
+  { id: 'bogota', name: 'Banco de Bogotá', color: '#003366' },
+  { id: 'bbva', name: 'BBVA', color: '#004481' },
+  { id: 'occidente', name: 'Banco de Occidente', color: '#003B71' },
+  { id: 'avvillas', name: 'AV Villas', color: '#005596' },
+  { id: 'rappicard', name: 'RappiCard', color: '#FF424D' },
+  { id: 'falabella', name: 'Banco Falabella', color: '#97D700' },
+  { id: 'caja_social', name: 'Banco Caja Social', color: '#00548E' },
+  { id: 'otros', name: 'Otros / Prestamista', color: '#6B7280' }
+];
+
 const INCOME_SOURCES = {
   "Empleo / Laboral": [
     "Salario / Nómina",
@@ -748,8 +762,8 @@ const DashboardView = ({ totalIncome, totalExpenses, healthScore, categoryStats,
           ) : (
             <div className="space-y-3 mt-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1 grid grid-cols-1 gap-2">
               {members.map(member => {
-                const memberIncome = member.incomes?.reduce((acc, inc) => acc + inc.amount, 0) || 0;
-                const memberExpenses = expenses.filter(e => e.responsibleId === member.id).reduce((acc, e) => acc + e.amount, 0);
+                const memberIncome = member.incomes?.reduce((acc, inc) => acc + (inc.amount || 0), 0) || 0;
+                const memberExpenses = expenses.filter(e => e.responsibleId === member.id).reduce((acc, e) => acc + (e.amount || 0), 0);
                 const balance = memberIncome - memberExpenses;
                 let statusColor = 'bg-white/10 text-emerald-100';
                 if (memberExpenses > memberIncome) statusColor = 'bg-red-500/20 text-red-100 border border-red-500/30';
@@ -1014,12 +1028,64 @@ const IncomeView = ({ members, updateMembers, currency, triggerCurrencyModal, is
     </div>
   );
 };
+
+
+
 const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settings, addExpense, triggerConfirm, onOpenAdd }) => {
   const [activeTab, setActiveTab] = useState('cards');
-  const [newItem, setNewItem] = useState({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' });
+  const [newItem, setNewItem] = useState({
+    ownerId: members[0]?.id,
+    type: 'Libre inversión',
+    entityType: 'bank',
+    entityName: '',
+    customName: '',
+    totalValue: '',
+    monthlyPayment: '',
+    term: '',
+    rate: '',
+    rateType: 'EA',
+    isAutoDebit: false,
+    last4: '',
+    cutoffDate: '',
+    disbursementDate: '',
+    // New fields for loan calculation
+    bank: 'bancolombia', // Default bank
+    amount: '', // Total loan amount
+    interestRate: '',
+    installments: '',
+    startDate: new Date().toISOString().split('T')[0]
+  });
   const [cardPaymentModal, setCardPaymentModal] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [editingItem, setEditingItem] = useState(null);
+
+  // Calculate estimated monthly payment dynamically
+  const calculatePayment = () => {
+    const P = parseFloat(newItem.amount);
+    const n = parseInt(newItem.installments);
+    let r = parseFloat(newItem.interestRate);
+
+    if (isNaN(P) || isNaN(n) || isNaN(r) || P <= 0 || n <= 0) return 0;
+
+    // Convert Rate if needed
+    if (newItem.rateType === 'EA') {
+      // Formula: r_mv = (1 + r_ea)^(1/12) - 1
+      r = Math.pow(1 + (r / 100), 1 / 12) - 1;
+    } else {
+      r = r / 100;
+    }
+
+    // Annuity Formula: A = P * (r * (1 + r)^n) / ((1 + r)^n - 1)
+    // If rate is 0, just divide properly
+    if (r === 0) return P / n;
+
+    const numerator = r * Math.pow(1 + r, n);
+    const denominator = Math.pow(1 + r, n) - 1;
+
+    return P * (numerator / denominator);
+  };
+
+  const estimatedPayment = calculatePayment();
 
   const handleEditItem = (memberId, item, type) => {
     setNewItem({
@@ -1038,7 +1104,13 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
       disbursementDate: item.disbursementDate || '',
       customName: item.customName || '',
       entityName: item.entityName || '',
-      type: item.type || 'Libre inversión'
+      type: item.type || 'Libre inversión',
+      // New loan fields
+      bank: item.bank || 'bancolombia',
+      amount: item.amount || '',
+      interestRate: item.interestRate || '',
+      installments: item.installments || '',
+      startDate: item.startDate || new Date().toISOString().split('T')[0]
     });
     setEditingItem({ ...item, type }); // Store Original ID and type
     onOpenAdd(); // Handle Open Add/Edit Modal
@@ -1062,7 +1134,28 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
           if (activeTab === 'cards') {
             return { ...m, cards: [...(m.cards || []), { id: Date.now(), name: 'Tarjeta', last4: newItem.last4, cutoffDate: newItem.cutoffDate }] };
           } else {
-            return { ...m, loans: [...(m.loans || []), { id: Date.now(), type: newItem.type, customName: newItem.customName, entityName: newItem.entityName, totalValue: parseFloat(newItem.totalValue), monthlyPayment: parseFloat(newItem.monthlyPayment), term: newItem.term, rate: newItem.rate, rateType: newItem.rateType, isAutoDebit: newItem.isAutoDebit, disbursementDate: newItem.disbursementDate }] };
+            return {
+              ...m, loans: [...(m.loans || []), {
+                id: Date.now(),
+                type: newItem.type,
+                customName: newItem.customName,
+                entityName: newItem.entityName,
+                totalValue: parseFloat(newItem.totalValue),
+                monthlyPayment: parseFloat(newItem.monthlyPayment),
+                term: newItem.term,
+                rate: newItem.rate,
+                rateType: newItem.rateType,
+                isAutoDebit: newItem.isAutoDebit,
+                disbursementDate: newItem.disbursementDate,
+                // New loan fields
+                bank: newItem.bank,
+                amount: parseFloat(newItem.amount),
+                interestRate: parseFloat(newItem.interestRate),
+                installments: parseInt(newItem.installments),
+                startDate: newItem.startDate,
+                estimatedPayment: estimatedPayment // Save estimated payment
+              }]
+            };
           }
         }
       }
@@ -1071,7 +1164,27 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
     updateMembers(updatedMembers);
     onClose();
     setEditingItem(null);
-    setNewItem({ ownerId: members[0]?.id, type: 'Libre inversión', entityType: 'bank', entityName: '', customName: '', totalValue: '', monthlyPayment: '', term: '', rate: '', rateType: 'EA', isAutoDebit: false, last4: '', cutoffDate: '', disbursementDate: '' });
+    setNewItem({
+      ownerId: members[0]?.id,
+      type: 'Libre inversión',
+      entityType: 'bank',
+      entityName: '',
+      customName: '',
+      totalValue: '',
+      monthlyPayment: '',
+      term: '',
+      rate: '',
+      rateType: 'EA',
+      isAutoDebit: false,
+      last4: '',
+      cutoffDate: '',
+      disbursementDate: '',
+      bank: 'bancolombia',
+      amount: '',
+      interestRate: '',
+      installments: '',
+      startDate: new Date().toISOString().split('T')[0]
+    });
   };
 
   const handleDeleteItem = (memberId, itemId, type) => {
@@ -1177,31 +1290,118 @@ const DebtsView = ({ members, updateMembers, currency, isAdding, onClose, settin
                 </div>
               ) : (
                 <>
-                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">¿Quién presta el dinero?</label>
-                    <div className="flex gap-2 mb-3">
-                      <button type="button" onClick={() => setNewItem({ ...newItem, entityType: 'bank' })} className={`flex-1 py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${newItem.entityType === 'bank' ? 'bg-white shadow text-emerald-700 border border-emerald-200' : 'text-gray-500'}`}><Building2 className="w-3 h-3" /> Entidad Bancaria</button>
-                      <button type="button" onClick={() => setNewItem({ ...newItem, entityType: 'person' })} className={`flex-1 py-2 text-xs font-bold rounded flex items-center justify-center gap-1 ${newItem.entityType === 'person' ? 'bg-white shadow text-indigo-700 border border-indigo-200' : 'text-gray-500'}`}><UserCircle className="w-3 h-3" /> Persona Natural</button>
+                  {/* Bank Selector */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Entidad Financiera</label>
+                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-1 bg-gray-50 rounded-lg">
+                      {COLOMBIA_BANKS.map((bank) => (
+                        <button
+                          key={bank.id}
+                          type="button"
+                          onClick={() => setNewItem({ ...newItem, bank: bank.id, entityName: bank.name })}
+                          className={`flex items-center gap-2 p-2 rounded-lg text-xs border transition-all ${newItem.bank === bank.id
+                            ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
+                            : 'border-gray-200 hover:bg-gray-100'
+                            }`}
+                        >
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: bank.color }} />
+                          <span className="truncate">{bank.name}</span>
+                        </button>
+                      ))}
                     </div>
-                    {newItem.entityType === 'bank' && bankOptions.length > 0 ? (
-                      <select className="w-full border p-2 rounded-lg bg-white text-sm" value={newItem.entityName} onChange={e => setNewItem({ ...newItem, entityName: e.target.value })}><option value="">Selecciona Banco</option>{bankOptions.map(bank => <option key={bank} value={bank}>{bank}</option>)}</select>
-                    ) : (
-                      <input className="w-full border p-2 rounded-lg text-sm" placeholder={newItem.entityType === 'bank' ? "Nombre del Banco" : "Nombre de la Persona"} value={newItem.entityName} onChange={e => setNewItem({ ...newItem, entityName: e.target.value })} />
-                    )}
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Nombre del Préstamo</label>
+                    <input
+                      type="text"
+                      value={newItem.customName}
+                      onChange={(e) => setNewItem({ ...newItem, customName: e.target.value })}
+                      className="w-full p-3 bg-gray-50 rounded-xl border-none text-gray-800 font-medium focus:ring-2 focus:ring-emerald-100"
+                      placeholder="Ej: Crédito Libre Inversión"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Monto Total Prestado</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={formatCurrencyInput(newItem.amount)}
+                        onChange={(e) => setNewItem({ ...newItem, amount: parseCurrencyInput(e.target.value) })}
+                        className="w-full p-3 pl-8 bg-gray-50 rounded-xl border-none text-gray-800 font-bold text-lg focus:ring-2 focus:ring-emerald-100"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-xs font-medium mb-1">Tipo de Préstamo</label><select className="w-full border p-2 rounded-lg text-sm bg-white" value={newItem.type} onChange={e => setNewItem({ ...newItem, type: e.target.value })}><option>Libre inversión</option><option>Cupo rotativo</option><option>Hipotecario</option><option>Vehículo</option><option>Educativo</option></select></div>
-                    <div><label className="block text-xs font-medium mb-1">Nombre (Opcional)</label><input className="w-full border p-2 rounded-lg text-sm" placeholder="Ej. Moto" value={newItem.customName} onChange={e => setNewItem({ ...newItem, customName: e.target.value })} /></div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Tasa de Interés (%)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={newItem.interestRate}
+                          onChange={(e) => setNewItem({ ...newItem, interestRate: parseFloat(e.target.value) })}
+                          className="w-full p-3 bg-gray-50 rounded-xl border-none text-gray-800 font-bold focus:ring-2 focus:ring-emerald-100"
+                          placeholder="24.5"
+                          step="0.01"
+                        />
+                        <div className="flex flex-col gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setNewItem({ ...newItem, rateType: 'EA' })}
+                            className={`px-2 py-1 text-[10px] rounded font-bold ${newItem.rateType === 'EA' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}
+                          >
+                            E.A.
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewItem({ ...newItem, rateType: 'MV' })}
+                            className={`px-2 py-1 text-[10px] rounded font-bold ${newItem.rateType === 'MV' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}
+                          >
+                            M.V.
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Cuotas (Meses)</label>
+                      <input
+                        type="number"
+                        value={newItem.installments}
+                        onChange={(e) => setNewItem({ ...newItem, installments: parseInt(e.target.value) })}
+                        className="w-full p-3 bg-gray-50 rounded-xl border-none text-gray-800 font-bold focus:ring-2 focus:ring-emerald-100"
+                        placeholder="12, 24, 36..."
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-xs font-medium mb-1">Monto Desembolsado</label><input required type="text" className="w-full border p-2 rounded-lg text-sm" value={formatCurrencyInput(newItem.totalValue)} onChange={e => setNewItem({ ...newItem, totalValue: parseCurrencyInput(e.target.value) })} /></div>
-                    <div><label className="block text-xs font-medium mb-1">Valor Cuota</label><input required type="text" className="w-full border p-2 rounded-lg text-sm" value={formatCurrencyInput(newItem.monthlyPayment)} onChange={e => setNewItem({ ...newItem, monthlyPayment: parseCurrencyInput(e.target.value) })} /></div>
+
+                  {/* Simulated Payment Info */}
+                  {estimatedPayment > 0 && (
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                      <p className="text-xs text-blue-600 font-medium mb-1">Cuota Mensual Estimada</p>
+                      <p className="text-xl font-bold text-blue-800">
+                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(estimatedPayment)}
+                      </p>
+                      <p className="text-[10px] text-blue-400 mt-1">
+                        *Cálculo referencial basado en tasa {newItem.rateType}. No incluye seguros ni cobros extra del banco.
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Fecha de Inicio</label>
+                    <input
+                      type="date"
+                      value={newItem.startDate}
+                      onChange={(e) => setNewItem({ ...newItem, startDate: e.target.value })}
+                      className="w-full p-3 bg-gray-50 rounded-xl border-none text-gray-800 font-medium focus:ring-2 focus:ring-emerald-100"
+                    />
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="col-span-1"><label className="block text-xs font-medium mb-1">Plazo (Meses)</label><input type="number" className="w-full border p-2 rounded-lg text-sm" value={newItem.term} onChange={e => setNewItem({ ...newItem, term: e.target.value })} /></div>
-                    <div className="col-span-2"><label className="block text-xs font-medium mb-1">Tasa de Interés</label><div className="flex"><input type="number" className="w-full border-y border-l rounded-l-lg p-2 text-sm" placeholder="1.5" value={newItem.rate} onChange={e => setNewItem({ ...newItem, rate: e.target.value })} /><select className="border rounded-r-lg bg-gray-50 text-xs px-1" value={newItem.rateType} onChange={e => setNewItem({ ...newItem, rateType: e.target.value })}><option value="EA">% E.A.</option><option value="MV">% M.V.</option></select></div></div>
-                  </div>
-                  <div><label className="block text-xs font-medium mb-1">Fecha de Desembolso</label><input type="date" className="w-full border p-2 rounded-lg text-sm" value={newItem.disbursementDate} onChange={e => setNewItem({ ...newItem, disbursementDate: e.target.value })} /></div>
                   <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100"><span className="text-sm font-medium">Débito Automático</span><input type="checkbox" checked={newItem.isAutoDebit} onChange={e => setNewItem({ ...newItem, isAutoDebit: e.target.checked })} className="w-5 h-5 accent-indigo-500" /></div>
                 </>
               )}
@@ -2234,7 +2434,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.8.2</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.0</p>
           </div>
         );
       case 'real_settings':
