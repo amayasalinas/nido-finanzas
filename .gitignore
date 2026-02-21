@@ -13,4 +13,3 @@ supabase/functions/*/deno.lock
 supabase.exe
 supabase_windows_amd64.tar.gz
 download_cli.ps1
-supabase/

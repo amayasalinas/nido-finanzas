@@ -1574,7 +1574,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
           <LogOut size={18} />
           Cerrar Sesión
         </button>
-        <p className="text-xs text-center text-gray-300 mt-4">Nido App v5.9.1</p>
+        <p className="text-xs text-center text-gray-300 mt-4">Nido App v5.9.2</p>
       </div>
 
       {/* US-13 Modal Notificaciones */}
@@ -1853,11 +1853,16 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
       // 4. Update Form
       setScannedImages(prev => [...prev, file]);
       if (scannedImages.length === 0) {
+        // Ensure amount is always a number (Gemini may return strings like "125.430")
+        const parsedAmount = ocrData.amount != null
+          ? parseFloat(String(ocrData.amount).replace(/[^\d.]/g, '')) || 0
+          : null;
+
         setData(prev => ({
           ...prev,
           title: ocrData.title || prev.title,
-          amount: ocrData.amount || prev.amount,
-          category: ocrData.category || 'servicios', // Default to services if relevant
+          amount: parsedAmount ?? prev.amount,
+          category: ocrData.category || 'servicios',
           serviceType: ocrData.serviceType || '',
           provider: ocrData.provider || '',
           paymentUrl: ocrData.paymentUrl || '',
@@ -1867,15 +1872,16 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
         }));
       }
       setScanResult("¡Análisis Completado con IA!");
+      setIsScanning(false);
 
     } catch (realOcrError) {
-      console.warn("Real OCR failed (User might not have deployed function yet). Falling back to Mock.", realOcrError);
+      console.warn("Real OCR failed. Falling back to Mock.", realOcrError);
 
-      // FALLBACK TO MOCK SIMULATION
+      // FALLBACK TO MOCK SIMULATION — setIsScanning(false) inside setTimeout
+      // so the spinner stays active until mock data is ready
       setTimeout(() => {
         setScannedImages(prev => [...prev, file]);
         if (scannedImages.length === 0) {
-          // ... (Existing Mock Logic)
           const scenarios = [
             { title: "Factura Luz", type: 'energia', provider: 'Enel Colombia', amount: 125430 },
             { title: "Factura Agua", type: 'agua', provider: 'Acueducto de Bogotá', amount: 87500 },
@@ -1903,9 +1909,8 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
         } else {
           setScanResult("Reverso capturado.");
         }
+        setIsScanning(false);
       }, 1500);
-    } finally {
-      setIsScanning(false);
     }
   };
 
@@ -1941,7 +1946,7 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
             </p>
             {scanResult && <p className="text-xs font-bold text-emerald-600 mt-1">{scanResult} ({scannedImages.length} img)</p>}
           </div>
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} disabled={scannedImages.length >= 2} />
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} disabled={scannedImages.length >= 2} />
         </div>
 
         <div className="space-y-5">
@@ -2458,7 +2463,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.1</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.2</p>
           </div>
         );
       case 'real_settings':
