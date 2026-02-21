@@ -1826,131 +1826,162 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
   const handleScan = async (file) => {
     if (scannedImages.length >= 2) return;
     setIsScanning(true);
-    setScanResult("Analizando imagen...");
+    setScanResult("Analizando imagen con IA...");
+
+    // Compress & resize image before sending (keeps payload small)
+    const compressImage = (imageFile) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(imageFile);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_W = 1200, MAX_H = 1600;
+          let w = img.width, h = img.height;
+          if (w > h) { if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; } }
+          else        { if (h > MAX_H) { w = Math.round(w * MAX_H / h); h = MAX_H; } }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+        };
+        img.onerror = reject;
+      };
+      reader.onerror = reject;
+    });
 
     try {
-      // Función para redimensionar y comprimir la imagen
-      const compressImage = (imageFile) => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(imageFile);
-          reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-              const canvas = document.createElement('canvas');
-              const MAX_WIDTH = 1200;
-              const MAX_HEIGHT = 1600;
-              let width = img.width;
-              let height = img.height;
-
-              if (width > height) {
-                if (width > MAX_WIDTH) {
-                  height *= Math.round(MAX_WIDTH / width);
-                  width = MAX_WIDTH;
-                }
-              } else {
-                if (height > MAX_HEIGHT) {
-                  width *= Math.round(MAX_HEIGHT / height);
-                  height = MAX_HEIGHT;
-                }
-              }
-              canvas.width = width;
-              canvas.height = height;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(img, 0, 0, width, height);
-              // Obtener base64 comprimido
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-              resolve(dataUrl.split(',')[1]);
-            };
-            img.onerror = (e) => reject(e);
-          };
-          reader.onerror = (e) => reject(e);
-        });
-      };
-
       const base64Data = await compressImage(file);
 
-      // Call Vercel Serverless Function
-      const response = await fetch('/api/ocr', {
+      // --- Call Gemini Vision directly from the browser ---
+      // Uses VITE_GEMINI_API_KEY (set in .env locally and in Vercel env vars)
+      const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!geminiApiKey || geminiApiKey === 'TU_API_KEY_AQUI') {
+        throw new Error('VITE_GEMINI_API_KEY no está configurada. Agrégala en las variables de entorno de Vercel.');
+      }
+
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+
+      const geminiResponse = await fetch(geminiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageBase64: base64Data,
-          mimeType: 'image/jpeg'
+          contents: [{
+            parts: [
+              {
+                text: `Eres un asistente contable experto en facturas y recibos colombianos.
+Analiza la imagen y devuelve ÚNICAMENTE un JSON con estos campos:
+- isUnreadable (boolean): true si la imagen está borrosa, oscura o no es una factura/recibo.
+- title (string): nombre corto descriptivo (ej. "Factura Enel", "Mercado Éxito").
+- amount (number): total a pagar SIN símbolos ni puntuación de miles. Ej: "$ 1.250.430" → 1250430.
+- category (string): una de [vivienda, servicios, comida, transporte, entretenimiento, salud, educacion, deudas, otros].
+- serviceType (string|null): si category es "servicios", usa agua|energia|gas|telecom. Si no aplica → null.
+- provider (string): nombre de la empresa tal como aparece.
+- dueDate (string|null): fecha límite de pago en formato YYYY-MM-DD. Busca "Pagar hasta", "Vence", "Fecha límite". Si no hay → null.
+- isRecurring (boolean): true para servicios, arriendo, suscripciones; false para compras únicas.
+Devuelve SOLO el JSON, sin markdown.`
+              },
+              { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            response_mime_type: 'application/json',
+            response_schema: {
+              type: 'OBJECT',
+              properties: {
+                isUnreadable: { type: 'BOOLEAN' },
+                title:        { type: 'STRING' },
+                amount:       { type: 'NUMBER' },
+                category:     { type: 'STRING', enum: ['vivienda','servicios','comida','transporte','entretenimiento','salud','educacion','deudas','otros'] },
+                serviceType:  { type: 'STRING', nullable: true },
+                provider:     { type: 'STRING' },
+                dueDate:      { type: 'STRING', nullable: true },
+                isRecurring:  { type: 'BOOLEAN' }
+              },
+              required: ['isUnreadable','title','amount','category','provider','isRecurring']
+            }
+          }
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      if (!geminiResponse.ok) {
+        const errText = await geminiResponse.text();
+        throw new Error(`Gemini API error ${geminiResponse.status}: ${errText.slice(0, 200)}`);
       }
 
-      const ocrData = await response.json();
+      const geminiData = await geminiResponse.json();
+      if (geminiData.error) throw new Error(geminiData.error.message);
 
-      console.log("OCR Result:", ocrData);
+      const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) throw new Error('Gemini no devolvió contenido.');
 
-      // 4. Update Form
+      const ocrData = JSON.parse(rawText.replace(/```json\s*|\s*```/g, '').trim());
+
+      if (ocrData.isUnreadable) {
+        setScanResult("⚠️ Imagen ilegible. Intenta con mejor iluminación.");
+        setIsScanning(false);
+        return;
+      }
+
+      // Ensure amount is always a number
+      const parsedAmount = ocrData.amount != null
+        ? parseFloat(String(ocrData.amount).replace(/[^\d.]/g, '')) || 0
+        : null;
+
       setScannedImages(prev => [...prev, file]);
       if (scannedImages.length === 0) {
-        // Ensure amount is always a number (Gemini may return strings like "125.430")
-        const parsedAmount = ocrData.amount != null
-          ? parseFloat(String(ocrData.amount).replace(/[^\d.]/g, '')) || 0
-          : null;
-
         setData(prev => ({
           ...prev,
-          title: ocrData.title || prev.title,
-          amount: parsedAmount ?? prev.amount,
-          category: ocrData.category || 'servicios',
-          serviceType: ocrData.serviceType || '',
-          provider: ocrData.provider || '',
-          paymentUrl: ocrData.paymentUrl || '',
-          dueDate: ocrData.dueDate || prev.dueDate,
-          isRecurring: ocrData.isRecurring || false,
+          title:         ocrData.title       || prev.title,
+          amount:        parsedAmount         ?? prev.amount,
+          category:      ocrData.category     || 'servicios',
+          serviceType:   ocrData.serviceType  || '',
+          provider:      ocrData.provider     || '',
+          paymentUrl:    ocrData.paymentUrl   || '',
+          dueDate:       ocrData.dueDate      || prev.dueDate,
+          isRecurring:   ocrData.isRecurring  || false,
           recurrenceType: ocrData.isRecurring ? 'variable' : 'fixed'
         }));
       }
-      setScanResult("¡Análisis Completado con IA!");
+      setScanResult("¡Análisis completado con IA!");
       setIsScanning(false);
 
-    } catch (realOcrError) {
-      console.warn("Real OCR failed. Falling back to Mock.", realOcrError);
+    } catch (ocrError) {
+      console.warn("OCR directo falló. Usando datos de demostración.", ocrError);
 
-      // FALLBACK TO MOCK SIMULATION — setIsScanning(false) inside setTimeout
-      // so the spinner stays active until mock data is ready
+      // Mock fallback — spinner se apaga cuando el mock termina
       setTimeout(() => {
         setScannedImages(prev => [...prev, file]);
         if (scannedImages.length === 0) {
           const scenarios = [
-            { title: "Factura Luz", type: 'energia', provider: 'Enel Colombia', amount: 125430 },
-            { title: "Factura Agua", type: 'agua', provider: 'Acueducto de Bogotá', amount: 87500 },
-            { title: "Factura Gas", type: 'gas', provider: 'Vanti', amount: 45200 },
-            { title: "Factura Internet", type: 'telecom', provider: 'Claro', amount: 110900 }
+            { title: "Factura Luz",     type: 'energia', provider: 'Enel Colombia',       amount: 125430 },
+            { title: "Factura Agua",    type: 'agua',    provider: 'Acueducto de Bogotá', amount: 87500  },
+            { title: "Factura Gas",     type: 'gas',     provider: 'Vanti',               amount: 45200  },
+            { title: "Factura Internet",type: 'telecom', provider: 'Claro',               amount: 110900 }
           ];
           const detected = scenarios[Math.floor(Math.random() * scenarios.length)];
           const providerData = PUBLIC_SERVICES[detected.type]?.providers?.find(p => p.name === detected.provider);
-          const detectedDueDate = new Date();
-          detectedDueDate.setDate(detectedDueDate.getDate() + 5);
-
+          const dueDate = new Date();
+          dueDate.setDate(dueDate.getDate() + 5);
           setData(prev => ({
             ...prev,
-            title: detected.title,
-            amount: detected.amount,
-            category: 'servicios',
-            serviceType: detected.type,
-            provider: detected.provider,
-            paymentUrl: providerData?.url || '',
-            dueDate: detectedDueDate.toISOString().split('T')[0],
-            isRecurring: true,
+            title:          detected.title,
+            amount:         detected.amount,
+            category:       'servicios',
+            serviceType:    detected.type,
+            provider:       detected.provider,
+            paymentUrl:     providerData?.url || '',
+            dueDate:        dueDate.toISOString().split('T')[0],
+            isRecurring:    true,
             recurrenceType: 'variable'
           }));
-          setScanResult(`¡Detectado (Offline): ${detected.provider}!`);
+          setScanResult(`Demo: ${detected.provider} (configura VITE_GEMINI_API_KEY para IA real)`);
         } else {
           setScanResult("Reverso capturado.");
         }
         setIsScanning(false);
-      }, 1500);
+      }, 1000);
     }
   };
 
