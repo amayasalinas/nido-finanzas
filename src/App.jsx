@@ -1574,7 +1574,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
           <LogOut size={18} />
           Cerrar Sesión
         </button>
-        <p className="text-xs text-center text-gray-300 mt-4">Nido App v5.9.5</p>
+        <p className="text-xs text-center text-gray-300 mt-4">Nido App v5.9.6</p>
       </div>
 
       {/* US-13 Modal Notificaciones */}
@@ -1792,7 +1792,8 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
   const [data, setData] = useState({ title: '', amount: '', category: 'otros', dueDate: '', responsibleId: members[0]?.id || '', isRecurring: false, recurrenceType: 'fixed', isAutoDebit: false, paymentUrl: '', billArrivalDay: '', serviceType: '', provider: '' });
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
-  const [scannedImages, setScannedImages] = useState([]); // Array to hold up to 2 images
+  const [scannedImages, setScannedImages] = useState([]);
+  const [pendingBase64s, setPendingBase64s] = useState([]); // base64 of each photo, sent together to AI
   const fileInputRef = useRef(null);
 
   // Reset/Populate form on open
@@ -1810,6 +1811,7 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
       }
       setScanResult(null);
       setScannedImages([]);
+      setPendingBase64s([]);
     }
   }, [isOpen, members, initialData]);
 
@@ -1823,50 +1825,46 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
     }
   }, [data.category, initialData]);
 
-  const handleScan = async (file) => {
-    if (scannedImages.length >= 2) return;
-    // Capture before any async operation to avoid stale closure in catch block
-    const isFirstScan = scannedImages.length === 0;
-    setIsScanning(true);
-    setScanResult("Analizando imagen con IA...");
-
-    // Compress & resize image before sending (keeps payload small)
-    const compressImage = (imageFile) => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(imageFile);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target.result;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_W = 1200, MAX_H = 1600;
-          let w = img.width, h = img.height;
-          if (w > h) { if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; } }
-          else        { if (h > MAX_H) { w = Math.round(w * MAX_H / h); h = MAX_H; } }
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
-        };
-        img.onerror = reject;
+  // Compress & resize image to keep payload small
+  const compressImage = (imageFile) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(imageFile);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_W = 1200, MAX_H = 1600;
+        let w = img.width, h = img.height;
+        if (w > h) { if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; } }
+        else        { if (h > MAX_H) { w = Math.round(w * MAX_H / h); h = MAX_H; } }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
       };
-      reader.onerror = reject;
-    });
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+
+  // --- AI analysis: receives ALL collected base64 images and fills the form ---
+  const runOcrAnalysis = async (base64Array) => {
+    setIsScanning(true);
+    setScanResult(`Analizando ${base64Array.length} foto(s) con IA...`);
 
     try {
-      const base64Data = await compressImage(file);
-
-      // --- Call Groq Vision (free: 14,400 req/day, 30 RPM) ---
       const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
       if (!groqApiKey) throw new Error('VITE_GROQ_API_KEY no configurada en Vercel');
 
-      setScanResult("Conectando con IA...");
+      // Build one message with ALL images so the model sees the full bill
+      const imageParts = base64Array.map(b64 => ({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${b64}` }
+      }));
 
       const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${groqApiKey}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqApiKey}` },
         body: JSON.stringify({
           model: 'meta-llama/llama-4-scout-17b-16e-instruct',
           temperature: 0.1,
@@ -1876,22 +1874,19 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
             content: [
               {
                 type: 'text',
-                text: `You are an expert accountant for a Colombian family. Analyze this invoice/bill image.
-Return ONLY a valid JSON object with these exact fields:
+                text: `You are an expert accountant for a Colombian family. You will receive ${base64Array.length} image(s) of the same bill/invoice (front and/or back). Analyze ALL images together and extract the complete information.
+Return ONLY a valid JSON object:
 {"isUnreadable":false,"title":"Factura Enel","amount":125430,"category":"servicios","serviceType":"energia","provider":"Enel Colombia","dueDate":"2025-03-15","isRecurring":true}
 
 Rules:
-- isUnreadable: true ONLY if image is too blurry/dark, or clearly not a bill/invoice.
-- amount: plain number, NO currency symbols, NO thousands separators. "$ 1.250.430" = 1250430.
+- isUnreadable: true ONLY if ALL images are too blurry/dark or not a bill at all.
+- amount: The TOTAL amount due. Plain number, NO currency symbols, NO thousands separators. "$ 1.250.430" = 1250430. Check ALL images — amount may only appear on one side.
 - category: one of: vivienda, servicios, comida, transporte, entretenimiento, salud, educacion, deudas, otros
 - serviceType: if category is "servicios" use: agua, energia, gas, or telecom. Otherwise null.
-- dueDate: YYYY-MM-DD. Look for "Pagar antes de", "Fecha limite", "Pago oportuno", "Vence". null if not found.
+- dueDate: YYYY-MM-DD. Look for "Pagar antes de", "Fecha limite", "Pago oportuno", "Vence" in ALL images. null if not found.
 - isRecurring: true for utilities/rent/subscriptions, false for one-time purchases.`
               },
-              {
-                type: 'image_url',
-                image_url: { url: `data:image/jpeg;base64,${base64Data}` }
-              }
+              ...imageParts
             ]
           }]
         })
@@ -1911,7 +1906,7 @@ Rules:
       const ocrData = JSON.parse(rawText.replace(/```json\s*|\s*```/g, '').trim());
 
       if (ocrData.isUnreadable) {
-        setScanResult("⚠️ Imagen ilegible. Mejor iluminación e intenta de nuevo.");
+        setScanResult("⚠️ Imágenes ilegibles. Intenta con mejor iluminación.");
         setIsScanning(false);
         return;
       }
@@ -1920,69 +1915,72 @@ Rules:
         ? parseFloat(String(ocrData.amount).replace(/[^\d.]/g, '')) || 0
         : null;
 
-      setScannedImages(prev => [...prev, file]);
-      if (scannedImages.length === 0) {
-        setData(prev => ({
-          ...prev,
-          title:          ocrData.title       || prev.title,
-          amount:         parsedAmount         ?? prev.amount,
-          category:       ocrData.category     || 'servicios',
-          serviceType:    ocrData.serviceType  || '',
-          provider:       ocrData.provider     || '',
-          paymentUrl:     ocrData.paymentUrl   || '',
-          dueDate:        ocrData.dueDate      || prev.dueDate,
-          isRecurring:    ocrData.isRecurring  || false,
-          recurrenceType: ocrData.isRecurring ? 'variable' : 'fixed'
-        }));
-      }
+      setData(prev => ({
+        ...prev,
+        title:          ocrData.title      || prev.title,
+        amount:         parsedAmount       ?? prev.amount,
+        category:       ocrData.category   || 'servicios',
+        serviceType:    ocrData.serviceType || '',
+        provider:       ocrData.provider   || '',
+        paymentUrl:     ocrData.paymentUrl || '',
+        dueDate:        ocrData.dueDate    || prev.dueDate,
+        isRecurring:    ocrData.isRecurring || false,
+        recurrenceType: ocrData.isRecurring ? 'variable' : 'fixed'
+      }));
       setScanResult("¡Análisis completado con IA!");
-      setIsScanning(false);
 
     } catch (ocrError) {
       const errMsg = ocrError instanceof Error ? ocrError.message : String(ocrError);
       console.error("OCR error:", errMsg);
-
-      // Friendlier message for quota errors
       const isQuota = errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('429');
-      const displayMsg = isQuota
-        ? "⚠️ Cuota de API agotada. Revisa tu plan en console.groq.com"
-        : `Error: ${errMsg.slice(0, 60)}`;
+      setScanResult(isQuota
+        ? "⚠️ Cuota de API agotada. Revisa console.groq.com"
+        : `Error: ${errMsg.slice(0, 60)}`);
 
-      setScanResult(displayMsg);
-      setIsScanning(false);
-
-      // Wait so user reads the error, then load mock demo data
+      // Mock fallback after showing error
       await new Promise(r => setTimeout(r, 2500));
+      const scenarios = [
+        { title: "Factura Luz",      type: 'energia', provider: 'Enel Colombia',       amount: 125430 },
+        { title: "Factura Agua",     type: 'agua',    provider: 'Acueducto de Bogotá', amount: 87500  },
+        { title: "Factura Gas",      type: 'gas',     provider: 'Vanti',               amount: 45200  },
+        { title: "Factura Internet", type: 'telecom', provider: 'Claro',               amount: 110900 }
+      ];
+      const detected = scenarios[Math.floor(Math.random() * scenarios.length)];
+      const providerData = PUBLIC_SERVICES[detected.type]?.providers?.find(p => p.name === detected.provider);
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 5);
+      setData(prev => ({
+        ...prev,
+        title: detected.title, amount: detected.amount, category: 'servicios',
+        serviceType: detected.type, provider: detected.provider,
+        paymentUrl: providerData?.url || '',
+        dueDate: dueDate.toISOString().split('T')[0],
+        isRecurring: true, recurrenceType: 'variable'
+      }));
+      setScanResult(`Demo: ${detected.provider}`);
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
-      setScannedImages(prev => [...prev, file]);
-      if (isFirstScan) {
-        // isFirstScan captured at function start — avoids stale closure bug
-        const scenarios = [
-          { title: "Factura Luz",      type: 'energia', provider: 'Enel Colombia',       amount: 125430 },
-          { title: "Factura Agua",     type: 'agua',    provider: 'Acueducto de Bogotá', amount: 87500  },
-          { title: "Factura Gas",      type: 'gas',     provider: 'Vanti',               amount: 45200  },
-          { title: "Factura Internet", type: 'telecom', provider: 'Claro',               amount: 110900 }
-        ];
-        const detected = scenarios[Math.floor(Math.random() * scenarios.length)];
-        const providerData = PUBLIC_SERVICES[detected.type]?.providers?.find(p => p.name === detected.provider);
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 5);
-        setData(prev => ({
-          ...prev,
-          title:          detected.title,
-          amount:         detected.amount,
-          category:       'servicios',
-          serviceType:    detected.type,
-          provider:       detected.provider,
-          paymentUrl:     providerData?.url || '',
-          dueDate:        dueDate.toISOString().split('T')[0],
-          isRecurring:    true,
-          recurrenceType: 'variable'
-        }));
-        setScanResult(`Demo: ${detected.provider} (sin IA por cuota)`);
-      } else {
-        setScanResult("Reverso capturado (demo).");
-      }
+  // --- Photo collection: just compresses and stores, triggers AI after 2nd photo ---
+  const handleScan = async (file) => {
+    if (scannedImages.length >= 2 || isScanning) return;
+
+    setScanResult("Procesando foto...");
+    const base64Data = await compressImage(file).catch(() => null);
+    if (!base64Data) { setScanResult("Error al leer la imagen."); return; }
+
+    const newBase64s = [...pendingBase64s, base64Data];
+    setPendingBase64s(newBase64s);
+    setScannedImages(prev => [...prev, file]);
+
+    if (newBase64s.length >= 2) {
+      // Both photos ready → analyze together
+      await runOcrAnalysis(newBase64s);
+    } else {
+      // First photo collected, waiting for the second
+      setScanResult("Foto frontal lista. Agrega el reverso para analizar.");
     }
   };
 
@@ -2002,8 +2000,8 @@ Rules:
         {/* Scanner Widget */}
         {/* Scanner Widget */}
         <div
-          onClick={() => { if (scannedImages.length < 2) fileInputRef.current?.click(); }}
-          className={`mb-6 bg-indigo-50 border border-dashed border-indigo-200 rounded-xl p-4 flex items-center gap-4 transition group relative overflow-hidden ${scannedImages.length >= 2 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-indigo-100'}`}
+          onClick={() => { if (scannedImages.length < 2 && !isScanning) fileInputRef.current?.click(); }}
+          className={`mb-2 bg-indigo-50 border border-dashed border-indigo-200 rounded-xl p-4 flex items-center gap-4 transition group relative overflow-hidden ${(scannedImages.length >= 2 || isScanning) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-indigo-100'}`}
         >
           <div className="bg-white p-3 rounded-full shadow-sm text-indigo-600 group-hover:scale-110 transition">
             {isScanning ? <Loader2 className="animate-spin" /> : <Camera />}
@@ -2011,15 +2009,30 @@ Rules:
           <div className="flex-1">
             <div className="flex justify-between items-center">
               <p className="font-bold text-indigo-900 text-sm">Escaneo Inteligente ({scannedImages.length}/2)</p>
-              {scannedImages.length > 0 && <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-bold">{scannedImages.length === 1 ? 'Foto Reverso Pendiente' : 'Completo'}</span>}
+              {scannedImages.length === 1 && !isScanning && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">Reverso pendiente</span>}
+              {scannedImages.length >= 2 && <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Analizando...</span>}
             </div>
             <p className="text-xs text-indigo-600/80">
-              {scannedImages.length === 0 ? "Sube foto frontal de la factura." : (scannedImages.length === 1 ? "¡Bien! Ahora sube el reverso." : "Imágenes cargadas.")}
+              {scannedImages.length === 0
+                ? "Toca para subir la foto frontal de la factura."
+                : scannedImages.length === 1
+                ? "¡Bien! Agrega el reverso o pulsa 'Analizar' si solo tienes una foto."
+                : "Ambas fotos listas, analizando con IA..."}
             </p>
-            {scanResult && <p className="text-xs font-bold text-emerald-600 mt-1">{scanResult} ({scannedImages.length} img)</p>}
+            {scanResult && <p className={`text-xs font-bold mt-1 ${scanResult.startsWith('⚠️') || scanResult.startsWith('Error') ? 'text-red-500' : 'text-emerald-600'}`}>{scanResult}</p>}
           </div>
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} disabled={scannedImages.length >= 2} />
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => { if (e.target.files?.[0]) { handleScan(e.target.files[0]); e.target.value = ''; } }} disabled={scannedImages.length >= 2 || isScanning} />
         </div>
+        {/* Analyze button — visible after 1st photo when not yet analyzing */}
+        {scannedImages.length === 1 && !isScanning && !scanResult?.includes('completado') && (
+          <button
+            type="button"
+            onClick={() => runOcrAnalysis(pendingBase64s)}
+            className="w-full mb-4 py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition flex items-center justify-center gap-2"
+          >
+            <Sparkles className="w-4 h-4" /> Analizar con IA ahora
+          </button>
+        )}
 
         <div className="space-y-5">
           <div>
@@ -2535,7 +2548,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.5</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.6</p>
           </div>
         );
       case 'real_settings':
@@ -2571,7 +2584,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.9.5</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.9.6</p>
           </div>
         </div>
       </aside>
@@ -2580,7 +2593,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.9.5</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.9.6</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
