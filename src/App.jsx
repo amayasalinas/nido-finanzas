@@ -1861,8 +1861,8 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
 
       setScanResult("Conectando con IA...");
 
-      // gemini-1.5-flash is GA → use /v1 endpoint (v1beta is for experimental models only)
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+      // v1beta supports response_mime_type; gemini-2.0-flash is available in v1beta
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
 
       const geminiResponse = await fetch(geminiUrl, {
         method: 'POST',
