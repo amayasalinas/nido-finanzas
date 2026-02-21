@@ -35,39 +35,25 @@ export default async function handler(req, res) {
         const base64Data = typeof imageBase64 === 'string' ? imageBase64 : Buffer.from(imageBase64).toString('base64');
 
         console.log("Calling Gemini 2.0 Flash...");
+        const systemInstruction = `Eres un asistente contable experto especializado en recibos y facturas familiares (especialmente de Colombia).
+Tareas:
+1. Evalúa si la imagen es legible y parece ser una factura, recibo o ticket de compra. Si está muy borrosa, cortada de forma que no se lee, o definitivamente NO es un recibo/factura, marca "isUnreadable" como true e inventa valores por defecto para los demás campos requeridos.
+2. Si es legible, extrae la información solicitada con estas reglas estrictas:
+- amount: El total a pagar, convertido a número. Sin símbolos ni puntuación de separador de miles. Ej: "$ 1.250.430" -> 1250430.
+- dueDate: YYYY-MM-DD. Busca "Pagar hasta", "Fecha límite", "Vence".
+- isRecurring: true para servicios públicos, arriendo, planes, suscripciones. false para compras de una vez o mercado.
+- serviceType: solo si category es "servicios". Puede ser: "agua", "energia", "gas", "telecom". Si no aplica, déjalo vacío o usa null.`;
+
+        console.log("Calling Gemini 2.0 Flash with Structured Outputs...");
         const response = await fetch(geminiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                system_instruction: {
+                    parts: [{ text: systemInstruction }]
+                },
                 contents: [{
                     parts: [
-                        {
-                            text: `You are an expert accountant assistant specialized in Colombian household bills and invoices.
-Analyze the invoice image and return ONLY a valid JSON object with these exact fields:
-
-{
-  "title": "Short descriptive title (e.g., 'Factura Enel', 'Recibo Agua', 'Mercado Éxito')",
-  "amount": 125430,
-  "category": "servicios",
-  "serviceType": "energia",
-  "provider": "Enel Colombia",
-  "paymentUrl": null,
-  "dueDate": "2025-03-15",
-  "isRecurring": true
-}
-
-Rules:
-- title: Short name describing the bill (string).
-- amount: The total amount due as a plain integer or decimal (NO currency symbols, NO commas, NO dots as thousands separator). If amount is "$ 1.250.430", return 1250430.
-- category: Must be exactly one of: vivienda | servicios | comida | transporte | entretenimiento | salud | educacion | deudas | otros.
-- serviceType: ONLY if category is "servicios", use one of: agua | energia | gas | telecom. Otherwise use null.
-- provider: Company name as shown on the bill (string).
-- paymentUrl: Payment URL if clearly visible on the bill, otherwise null.
-- dueDate: Payment due date in YYYY-MM-DD format. Look for "Pagar hasta", "Fecha límite", "Pago Oportuno", "Vence". If not found, use null.
-- isRecurring: true for utilities, subscriptions, rent. false for one-time purchases.
-
-Return ONLY the JSON object. No markdown, no explanation.`
-                        },
                         {
                             inline_data: {
                                 mime_type: mimeType || 'image/jpeg',
@@ -77,8 +63,22 @@ Return ONLY the JSON object. No markdown, no explanation.`
                     ]
                 }],
                 generationConfig: {
+                    temperature: 0.1,
                     response_mime_type: "application/json",
-                    temperature: 0.1
+                    response_schema: {
+                        type: "OBJECT",
+                        properties: {
+                            isUnreadable: { type: "BOOLEAN", description: "true if the image is too blurry, dark, or no invoice/bill is visible." },
+                            title: { type: "STRING", description: "Short descriptive title (e.g., 'Factura Enel', 'Recibo Agua', 'Mercado Éxito')" },
+                            amount: { type: "NUMBER", description: "The total amount due. NO currency symbols. Just the number." },
+                            category: { type: "STRING", enum: ["vivienda", "servicios", "comida", "transporte", "entretenimiento", "salud", "educacion", "deudas", "otros"] },
+                            serviceType: { type: "STRING", description: "Must be one of: agua, energia, gas, telecom. Null or empty if not applicable.", nullable: true },
+                            provider: { type: "STRING", description: "Company name as shown on the bill" },
+                            dueDate: { type: "STRING", description: "YYYY-MM-DD", nullable: true },
+                            isRecurring: { type: "BOOLEAN" }
+                        },
+                        required: ["isUnreadable", "title", "amount", "category", "provider", "isRecurring"]
+                    }
                 }
             }),
         });
@@ -104,6 +104,11 @@ Return ONLY the JSON object. No markdown, no explanation.`
 
         const jsonStr = content.replace(/```json\s*|\s*```/g, '').trim();
         const extractedData = JSON.parse(jsonStr);
+
+        if (extractedData.isUnreadable) {
+            console.warn("Gemini flagged the image as unreadable.");
+            return res.status(422).json({ error: "No pudimos leer la factura. Asegúrate de que la foto no esté borrosa o muy oscura e intenta de nuevo." });
+        }
 
         if (extractedData.amount !== null && extractedData.amount !== undefined) {
             const rawAmount = String(extractedData.amount).replace(/[^\d.]/g, '');
