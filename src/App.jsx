@@ -1854,13 +1854,15 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
       const base64Data = await compressImage(file);
 
       // --- Call Gemini Vision directly from the browser ---
-      // Uses VITE_GEMINI_API_KEY (set in .env locally and in Vercel env vars)
       const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!geminiApiKey || geminiApiKey === 'TU_API_KEY_AQUI') {
-        throw new Error('VITE_GEMINI_API_KEY no está configurada. Agrégala en las variables de entorno de Vercel.');
+        throw new Error('API key no configurada');
       }
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+      setScanResult("Conectando con IA...");
+
+      // Use gemini-1.5-flash: best balance of vision capability and reliability
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
 
       const geminiResponse = await fetch(geminiUrl, {
         method: 'POST',
@@ -1869,62 +1871,56 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
           contents: [{
             parts: [
               {
-                text: `Eres un asistente contable experto en facturas y recibos colombianos.
-Analiza la imagen y devuelve ÚNICAMENTE un JSON con estos campos:
-- isUnreadable (boolean): true si la imagen está borrosa, oscura o no es una factura/recibo.
-- title (string): nombre corto descriptivo (ej. "Factura Enel", "Mercado Éxito").
-- amount (number): total a pagar SIN símbolos ni puntuación de miles. Ej: "$ 1.250.430" → 1250430.
-- category (string): una de [vivienda, servicios, comida, transporte, entretenimiento, salud, educacion, deudas, otros].
-- serviceType (string|null): si category es "servicios", usa agua|energia|gas|telecom. Si no aplica → null.
-- provider (string): nombre de la empresa tal como aparece.
-- dueDate (string|null): fecha límite de pago en formato YYYY-MM-DD. Busca "Pagar hasta", "Vence", "Fecha límite". Si no hay → null.
-- isRecurring (boolean): true para servicios, arriendo, suscripciones; false para compras únicas.
-Devuelve SOLO el JSON, sin markdown.`
+                text: `You are an expert accountant for a Colombian family. Analyze this invoice/bill image.
+Return ONLY a valid JSON object (no markdown, no explanation) with these exact fields:
+{
+  "isUnreadable": false,
+  "title": "Factura Enel",
+  "amount": 125430,
+  "category": "servicios",
+  "serviceType": "energia",
+  "provider": "Enel Colombia",
+  "dueDate": "2025-03-15",
+  "isRecurring": true
+}
+
+Rules:
+- isUnreadable: true ONLY if image is too blurry/dark to read, or is clearly not a bill/invoice.
+- amount: integer or decimal, NO currency symbols, NO thousands separators. "$ 1.250.430" = 1250430.
+- category: one of [vivienda, servicios, comida, transporte, entretenimiento, salud, educacion, deudas, otros].
+- serviceType: if category is "servicios", use one of [agua, energia, gas, telecom]. Otherwise null.
+- dueDate: YYYY-MM-DD format. Look for "Pagar antes de", "Fecha límite", "Pago oportuno", "Vence". null if not found.
+- isRecurring: true for utilities, rent, subscriptions. false for one-time purchases.
+Return ONLY the JSON object.`
               },
               { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
             ]
           }],
-          generationConfig: {
-            temperature: 0.1,
-            response_mime_type: 'application/json',
-            response_schema: {
-              type: 'OBJECT',
-              properties: {
-                isUnreadable: { type: 'BOOLEAN' },
-                title:        { type: 'STRING' },
-                amount:       { type: 'NUMBER' },
-                category:     { type: 'STRING', enum: ['vivienda','servicios','comida','transporte','entretenimiento','salud','educacion','deudas','otros'] },
-                serviceType:  { type: 'STRING', nullable: true },
-                provider:     { type: 'STRING' },
-                dueDate:      { type: 'STRING', nullable: true },
-                isRecurring:  { type: 'BOOLEAN' }
-              },
-              required: ['isUnreadable','title','amount','category','provider','isRecurring']
-            }
-          }
+          generationConfig: { temperature: 0.1, response_mime_type: 'application/json' }
         })
       });
 
       if (!geminiResponse.ok) {
         const errText = await geminiResponse.text();
-        throw new Error(`Gemini API error ${geminiResponse.status}: ${errText.slice(0, 200)}`);
+        let errMsg = `Error ${geminiResponse.status}`;
+        try { errMsg = JSON.parse(errText)?.error?.message || errMsg; } catch {}
+        throw new Error(errMsg);
       }
 
       const geminiData = await geminiResponse.json();
       if (geminiData.error) throw new Error(geminiData.error.message);
 
       const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) throw new Error('Gemini no devolvió contenido.');
+      if (!rawText) throw new Error('Sin respuesta de Gemini');
 
       const ocrData = JSON.parse(rawText.replace(/```json\s*|\s*```/g, '').trim());
 
       if (ocrData.isUnreadable) {
-        setScanResult("⚠️ Imagen ilegible. Intenta con mejor iluminación.");
+        setScanResult("⚠️ Imagen ilegible. Mejor iluminación e intenta de nuevo.");
         setIsScanning(false);
         return;
       }
 
-      // Ensure amount is always a number
       const parsedAmount = ocrData.amount != null
         ? parseFloat(String(ocrData.amount).replace(/[^\d.]/g, '')) || 0
         : null;
@@ -1933,14 +1929,14 @@ Devuelve SOLO el JSON, sin markdown.`
       if (scannedImages.length === 0) {
         setData(prev => ({
           ...prev,
-          title:         ocrData.title       || prev.title,
-          amount:        parsedAmount         ?? prev.amount,
-          category:      ocrData.category     || 'servicios',
-          serviceType:   ocrData.serviceType  || '',
-          provider:      ocrData.provider     || '',
-          paymentUrl:    ocrData.paymentUrl   || '',
-          dueDate:       ocrData.dueDate      || prev.dueDate,
-          isRecurring:   ocrData.isRecurring  || false,
+          title:          ocrData.title       || prev.title,
+          amount:         parsedAmount         ?? prev.amount,
+          category:       ocrData.category     || 'servicios',
+          serviceType:    ocrData.serviceType  || '',
+          provider:       ocrData.provider     || '',
+          paymentUrl:     ocrData.paymentUrl   || '',
+          dueDate:        ocrData.dueDate      || prev.dueDate,
+          isRecurring:    ocrData.isRecurring  || false,
           recurrenceType: ocrData.isRecurring ? 'variable' : 'fixed'
         }));
       }
@@ -1948,40 +1944,43 @@ Devuelve SOLO el JSON, sin markdown.`
       setIsScanning(false);
 
     } catch (ocrError) {
-      console.warn("OCR directo falló. Usando datos de demostración.", ocrError);
+      // Show real error in UI so user knows what failed
+      const errMsg = ocrError instanceof Error ? ocrError.message : String(ocrError);
+      console.error("OCR error:", errMsg);
+      setScanResult(`Error: ${errMsg.slice(0, 60)}`);
+      setIsScanning(false);
 
-      // Mock fallback — spinner se apaga cuando el mock termina
-      setTimeout(() => {
-        setScannedImages(prev => [...prev, file]);
-        if (scannedImages.length === 0) {
-          const scenarios = [
-            { title: "Factura Luz",     type: 'energia', provider: 'Enel Colombia',       amount: 125430 },
-            { title: "Factura Agua",    type: 'agua',    provider: 'Acueducto de Bogotá', amount: 87500  },
-            { title: "Factura Gas",     type: 'gas',     provider: 'Vanti',               amount: 45200  },
-            { title: "Factura Internet",type: 'telecom', provider: 'Claro',               amount: 110900 }
-          ];
-          const detected = scenarios[Math.floor(Math.random() * scenarios.length)];
-          const providerData = PUBLIC_SERVICES[detected.type]?.providers?.find(p => p.name === detected.provider);
-          const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 5);
-          setData(prev => ({
-            ...prev,
-            title:          detected.title,
-            amount:         detected.amount,
-            category:       'servicios',
-            serviceType:    detected.type,
-            provider:       detected.provider,
-            paymentUrl:     providerData?.url || '',
-            dueDate:        dueDate.toISOString().split('T')[0],
-            isRecurring:    true,
-            recurrenceType: 'variable'
-          }));
-          setScanResult(`Demo: ${detected.provider} (configura VITE_GEMINI_API_KEY para IA real)`);
-        } else {
-          setScanResult("Reverso capturado.");
-        }
-        setIsScanning(false);
-      }, 1000);
+      // Wait so user reads the error, then load mock
+      await new Promise(r => setTimeout(r, 2500));
+
+      setScannedImages(prev => [...prev, file]);
+      if (scannedImages.length === 0) {
+        const scenarios = [
+          { title: "Factura Luz",      type: 'energia', provider: 'Enel Colombia',       amount: 125430 },
+          { title: "Factura Agua",     type: 'agua',    provider: 'Acueducto de Bogotá', amount: 87500  },
+          { title: "Factura Gas",      type: 'gas',     provider: 'Vanti',               amount: 45200  },
+          { title: "Factura Internet", type: 'telecom', provider: 'Claro',               amount: 110900 }
+        ];
+        const detected = scenarios[Math.floor(Math.random() * scenarios.length)];
+        const providerData = PUBLIC_SERVICES[detected.type]?.providers?.find(p => p.name === detected.provider);
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 5);
+        setData(prev => ({
+          ...prev,
+          title:          detected.title,
+          amount:         detected.amount,
+          category:       'servicios',
+          serviceType:    detected.type,
+          provider:       detected.provider,
+          paymentUrl:     providerData?.url || '',
+          dueDate:        dueDate.toISOString().split('T')[0],
+          isRecurring:    true,
+          recurrenceType: 'variable'
+        }));
+        setScanResult(`Demo: ${detected.provider}`);
+      } else {
+        setScanResult("Reverso capturado.");
+      }
     }
   };
 
