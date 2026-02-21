@@ -1826,27 +1826,67 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
   const handleScan = async (file) => {
     if (scannedImages.length >= 2) return;
     setIsScanning(true);
-    setScanResult("Subiendo y analizando...");
+    setScanResult("Analizando imagen...");
 
     try {
-      // 1. Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
+      // Función para redimensionar y comprimir la imagen
+      const compressImage = (imageFile) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(imageFile);
+          reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX_WIDTH = 1200;
+              const MAX_HEIGHT = 1600;
+              let width = img.width;
+              let height = img.height;
 
-      const { error: uploadError } = await supabase.storage.from('invoices').upload(filePath, file);
+              if (width > height) {
+                if (width > MAX_WIDTH) {
+                  height *= Math.round(MAX_WIDTH / width);
+                  width = MAX_WIDTH;
+                }
+              } else {
+                if (height > MAX_HEIGHT) {
+                  width *= Math.round(MAX_HEIGHT / height);
+                  height = MAX_HEIGHT;
+                }
+              }
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, width, height);
+              // Obtener base64 comprimido
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+              resolve(dataUrl.split(',')[1]);
+            };
+            img.onerror = (e) => reject(e);
+          };
+          reader.onerror = (e) => reject(e);
+        });
+      };
 
-      if (uploadError) throw uploadError;
+      const base64Data = await compressImage(file);
 
-      // 2. Get Public URL (or Signed URL)
-      const { data: { publicUrl } } = supabase.storage.from('invoices').getPublicUrl(filePath);
-
-      // 3. Call Edge Function (Real OCR)
-      const { data: ocrData, error: funcError } = await supabase.functions.invoke('review-invoice', {
-        body: { imageUrl: publicUrl }
+      // Call Vercel Serverless Function
+      const response = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: base64Data,
+          mimeType: 'image/jpeg'
+        })
       });
 
-      if (funcError) throw funcError;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+
+      const ocrData = await response.json();
 
       console.log("OCR Result:", ocrData);
 
