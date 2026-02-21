@@ -1825,6 +1825,8 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
 
   const handleScan = async (file) => {
     if (scannedImages.length >= 2) return;
+    // Capture before any async operation to avoid stale closure in catch block
+    const isFirstScan = scannedImages.length === 0;
     setIsScanning(true);
     setScanResult("Analizando imagen con IA...");
 
@@ -1944,17 +1946,24 @@ Return ONLY the JSON object.`
       setIsScanning(false);
 
     } catch (ocrError) {
-      // Show real error in UI so user knows what failed
       const errMsg = ocrError instanceof Error ? ocrError.message : String(ocrError);
       console.error("OCR error:", errMsg);
-      setScanResult(`Error: ${errMsg.slice(0, 60)}`);
+
+      // Friendlier message for quota errors
+      const isQuota = errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('429');
+      const displayMsg = isQuota
+        ? "⚠️ Cuota de API agotada. Revisa tu plan en aistudio.google.com"
+        : `Error: ${errMsg.slice(0, 60)}`;
+
+      setScanResult(displayMsg);
       setIsScanning(false);
 
-      // Wait so user reads the error, then load mock
+      // Wait so user reads the error, then load mock demo data
       await new Promise(r => setTimeout(r, 2500));
 
       setScannedImages(prev => [...prev, file]);
-      if (scannedImages.length === 0) {
+      if (isFirstScan) {
+        // isFirstScan captured at function start — avoids stale closure bug
         const scenarios = [
           { title: "Factura Luz",      type: 'energia', provider: 'Enel Colombia',       amount: 125430 },
           { title: "Factura Agua",     type: 'agua',    provider: 'Acueducto de Bogotá', amount: 87500  },
@@ -1977,9 +1986,9 @@ Return ONLY the JSON object.`
           isRecurring:    true,
           recurrenceType: 'variable'
         }));
-        setScanResult(`Demo: ${detected.provider}`);
+        setScanResult(`Demo: ${detected.provider} (sin IA por cuota)`);
       } else {
-        setScanResult("Reverso capturado.");
+        setScanResult("Reverso capturado (demo).");
       }
     }
   };
