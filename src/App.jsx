@@ -1574,7 +1574,7 @@ const SettingsView = ({ settings, setSettings, onLogout }) => {
           <LogOut size={18} />
           Cerrar Sesión
         </button>
-        <p className="text-xs text-center text-gray-300 mt-4">Nido App v5.9.4</p>
+        <p className="text-xs text-center text-gray-300 mt-4">Nido App v5.9.5</p>
       </div>
 
       {/* US-13 Modal Notificaciones */}
@@ -1855,56 +1855,58 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
     try {
       const base64Data = await compressImage(file);
 
-      // --- Call Gemini Vision directly from the browser ---
-      const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!geminiApiKey || geminiApiKey === 'TU_API_KEY_AQUI') {
-        throw new Error('API key no configurada');
-      }
+      // --- Call Groq Vision (free: 14,400 req/day, 30 RPM) ---
+      const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
+      if (!groqApiKey) throw new Error('VITE_GROQ_API_KEY no configurada en Vercel');
 
       setScanResult("Conectando con IA...");
 
-      // gemini-2.0-flash in v1beta is confirmed working with this API key (got 429 = reached Gemini)
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
-
-      const geminiResponse = await fetch(geminiUrl, {
+      const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${groqApiKey}`
+        },
         body: JSON.stringify({
-          contents: [{
-            parts: [
+          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+          messages: [{
+            role: 'user',
+            content: [
               {
+                type: 'text',
                 text: `You are an expert accountant for a Colombian family. Analyze this invoice/bill image.
-Return ONLY a valid JSON object. No markdown, no explanation, no code block. Just raw JSON.
-Example: {"isUnreadable":false,"title":"Factura Enel","amount":125430,"category":"servicios","serviceType":"energia","provider":"Enel Colombia","dueDate":"2025-03-15","isRecurring":true}
+Return ONLY a valid JSON object with these exact fields:
+{"isUnreadable":false,"title":"Factura Enel","amount":125430,"category":"servicios","serviceType":"energia","provider":"Enel Colombia","dueDate":"2025-03-15","isRecurring":true}
 
 Rules:
 - isUnreadable: true ONLY if image is too blurry/dark, or clearly not a bill/invoice.
 - amount: plain number, NO currency symbols, NO thousands separators. "$ 1.250.430" = 1250430.
 - category: one of: vivienda, servicios, comida, transporte, entretenimiento, salud, educacion, deudas, otros
-- serviceType: if category is "servicios" use one of: agua, energia, gas, telecom. Otherwise null.
+- serviceType: if category is "servicios" use: agua, energia, gas, or telecom. Otherwise null.
 - dueDate: YYYY-MM-DD. Look for "Pagar antes de", "Fecha limite", "Pago oportuno", "Vence". null if not found.
-- isRecurring: true for utilities/rent/subscriptions, false for one-time purchases.
-Output ONLY the JSON object.`
+- isRecurring: true for utilities/rent/subscriptions, false for one-time purchases.`
               },
-              { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/jpeg;base64,${base64Data}` }
+              }
             ]
-          }],
-          generationConfig: { temperature: 0.1, response_mime_type: 'application/json' }
+          }]
         })
       });
 
-      if (!geminiResponse.ok) {
-        const errText = await geminiResponse.text();
-        let errMsg = `Error ${geminiResponse.status}`;
+      if (!groqResponse.ok) {
+        const errText = await groqResponse.text();
+        let errMsg = `Error ${groqResponse.status}`;
         try { errMsg = JSON.parse(errText)?.error?.message || errMsg; } catch {}
         throw new Error(errMsg);
       }
 
-      const geminiData = await geminiResponse.json();
-      if (geminiData.error) throw new Error(geminiData.error.message);
-
-      const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) throw new Error('Sin respuesta de Gemini');
+      const groqData = await groqResponse.json();
+      const rawText = groqData.choices?.[0]?.message?.content;
+      if (!rawText) throw new Error('Sin respuesta de Groq');
 
       const ocrData = JSON.parse(rawText.replace(/```json\s*|\s*```/g, '').trim());
 
@@ -1943,7 +1945,7 @@ Output ONLY the JSON object.`
       // Friendlier message for quota errors
       const isQuota = errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('429');
       const displayMsg = isQuota
-        ? "⚠️ Cuota de API agotada. Revisa tu plan en aistudio.google.com"
+        ? "⚠️ Cuota de API agotada. Revisa tu plan en console.groq.com"
         : `Error: ${errMsg.slice(0, 60)}`;
 
       setScanResult(displayMsg);
@@ -2533,7 +2535,7 @@ export default function FamilyFinanceApp() {
                 <span className="font-bold text-gray-800">Ajustes</span>
               </button>
             </div>
-            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.4</p>
+            <p className="text-center text-gray-300 text-[10px] mt-6">Nido App v5.9.5</p>
           </div>
         );
       case 'real_settings':
@@ -2569,7 +2571,7 @@ export default function FamilyFinanceApp() {
           <div className="overflow-hidden">
             <p className="font-bold text-sm truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Miembro'}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.9.4</p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1">v5.9.5</p>
           </div>
         </div>
       </aside>
@@ -2578,7 +2580,7 @@ export default function FamilyFinanceApp() {
       <header className="md:hidden flex justify-between items-center p-4 bg-white sticky top-0 z-40 border-b border-gray-50/50 backdrop-blur-md bg-white/80">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.9.4</span>
+            Hola, {(user?.name || user?.email || 'Usuario').split(' ')[0]} <span className="text-[10px] text-emerald-600 font-bold ml-1 border px-1 rounded bg-emerald-50 border-emerald-100">v5.9.5</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
