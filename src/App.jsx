@@ -1863,8 +1863,9 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
 
       setScanResult("Conectando con IA...");
 
-      // v1beta supports response_mime_type; gemini-2.0-flash is available in v1beta
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+      // /v1 is the stable endpoint. gemini-1.5-flash is free-tier, no billing required.
+      // No response_mime_type (not supported in /v1) — JSON enforced via prompt only.
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
 
       const geminiResponse = await fetch(geminiUrl, {
         method: 'POST',
@@ -1874,31 +1875,23 @@ const ExpenseCreatorModal = ({ isOpen, onClose, onSave, members, initialData }) 
             parts: [
               {
                 text: `You are an expert accountant for a Colombian family. Analyze this invoice/bill image.
-Return ONLY a valid JSON object (no markdown, no explanation) with these exact fields:
-{
-  "isUnreadable": false,
-  "title": "Factura Enel",
-  "amount": 125430,
-  "category": "servicios",
-  "serviceType": "energia",
-  "provider": "Enel Colombia",
-  "dueDate": "2025-03-15",
-  "isRecurring": true
-}
+Return ONLY a valid JSON object. No markdown, no explanation, no code block. Just the raw JSON.
+Example output:
+{"isUnreadable":false,"title":"Factura Enel","amount":125430,"category":"servicios","serviceType":"energia","provider":"Enel Colombia","dueDate":"2025-03-15","isRecurring":true}
 
 Rules:
 - isUnreadable: true ONLY if image is too blurry/dark to read, or is clearly not a bill/invoice.
-- amount: integer or decimal, NO currency symbols, NO thousands separators. "$ 1.250.430" = 1250430.
-- category: one of [vivienda, servicios, comida, transporte, entretenimiento, salud, educacion, deudas, otros].
-- serviceType: if category is "servicios", use one of [agua, energia, gas, telecom]. Otherwise null.
-- dueDate: YYYY-MM-DD format. Look for "Pagar antes de", "Fecha límite", "Pago oportuno", "Vence". null if not found.
-- isRecurring: true for utilities, rent, subscriptions. false for one-time purchases.
-Return ONLY the JSON object.`
+- amount: plain number, NO currency symbols, NO dot/comma thousands separators. "$ 1.250.430" becomes 1250430.
+- category: exactly one of: vivienda, servicios, comida, transporte, entretenimiento, salud, educacion, deudas, otros
+- serviceType: if category is "servicios" use one of: agua, energia, gas, telecom — otherwise use null.
+- dueDate: YYYY-MM-DD. Look for "Pagar antes de", "Fecha limite", "Pago oportuno", "Vence". Use null if not found.
+- isRecurring: true for utilities/rent/subscriptions, false for one-time purchases.
+Output ONLY the JSON object, nothing else.`
               },
               { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
             ]
           }],
-          generationConfig: { temperature: 0.1, response_mime_type: 'application/json' }
+          generationConfig: { temperature: 0.1 }
         })
       });
 
